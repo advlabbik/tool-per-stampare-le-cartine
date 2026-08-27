@@ -23,6 +23,30 @@ un PNG ad alta risoluzione pronto per la tipografia.
 - Inclinazione della vista a volo d'uccello, con terreno 3D opzionale
 - Export PNG a 150/200/300 DPI nei formati 30×40, 50×70, A2, A1, con opzione
   di dettaglio maggiorato per la rete sentieristica
+- **Vista Altimetria**: profili altimetrici da montare sui file di stampa,
+  con i paesi e i passi presi da un GPX di waypoint — vedi sotto
+
+## Altimetria
+
+La seconda scheda del tool (in alto a sinistra) disegna il profilo
+altimetrico delle tracce caricate e lo esporta in PNG ad alta risoluzione,
+anche **a sfondo trasparente** per montarlo direttamente sul file di stampa.
+Non serve il token Mapbox: il profilo nasce tutto dai dati GPX.
+
+- Si caricano le stesse tracce della mappa, più un **GPX di waypoint**
+  (paesi, passi, laghi, rifugi): i punti entro la distanza scelta vengono
+  proiettati sul profilo — pallino e nome per i paesi, triangolo per passi
+  e luoghi
+- Il percorso si può **spezzare in più tratti**: i tagli cadono a intervalli
+  regolari ma si agganciano al paese più vicino (preferendo i centri più
+  grandi), e ogni taglio si può spostare a mano su un altro paese
+- Ogni tratto stampa lunghezza, dislivello positivo e chilometro assoluto
+  di inizio e fine, così il partecipante sa sempre dove si trova
+- Sul profilo intero si possono imporre i **totali ufficiali** dell'evento
+  al posto di quelli calcolati dal GPX (il D+ ricavato dal GPX è sempre un
+  po' diverso da quello dichiarato)
+- Quota livellata su 200 m e dislivello con isteresi di 5 m, per non
+  gonfiare il D+ col rumore del GPS
 
 ## Come si usa
 
@@ -38,21 +62,19 @@ Sulla stampa va riportata l'attribuzione **© Mapbox © OpenStreetMap**.
 
 ## Token Mapbox
 
-Il repository **non contiene nessun token**. Al primo avvio la pagina ne
-chiede uno pubblico (`pk.…`), lo salva nel browser e non lo richiede più.
-
-Per crearne uno gratis:
+Il file contiene il token pubblico Mapbox di AdventureLab (variabile `TOKEN`
+in cima allo script). I token `pk.` sono pensati per stare nel codice client,
+**ma vanno protetti con le restrizioni URL**, altrimenti chiunque può usarli
+consumando la quota dell'account:
 
 1. Vai su [account.mapbox.com](https://account.mapbox.com) → Tokens
-2. Crea un token dedicato a questo strumento (basta il tipo pubblico `pk.`)
-3. In **URL restrictions** aggiungi il dominio dove è pubblicata la pagina,
-   ad esempio `https://TUOUTENTE.github.io` — così il token funziona solo lì
-4. Incolla il token nella pagina al primo avvio
+2. Apri il token e in **URL restrictions** aggiungi i domini dove gira la
+   pagina, ad esempio `https://advlabbik.github.io`
+3. Salva
 
-Chi fa un fork può in alternativa scrivere il proprio token nella variabile
-`TOKEN` in cima allo script, ricordandosi le restrizioni URL. GitHub blocca
-le push che contengono token Mapbox riconoscibili, quindi il token hardcoded
-va usato solo su copie locali o dove la protezione segreti lo consente.
+Se il token viene revocato o rifiutato, la pagina ne chiede uno nuovo
+all'avvio e lo conserva nel browser. Chi fa un fork deve sostituire il token
+con il proprio nella variabile `TOKEN`.
 
 ## Pubblicare con GitHub Pages
 
