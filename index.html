@@ -100,6 +100,50 @@
     padding: 10px 20px; margin-top: auto;
   }
 
+  /* ===== Viste: Mappa / Altimetria ===== */
+  .viewtab { display: flex; gap: 6px; margin-top: 14px; }
+  .viewtab button {
+    flex: 1; width: auto; background: var(--panel-2); color: var(--muted);
+    border: 1px solid var(--line); border-radius: 6px; padding: 8px;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .viewtab button.on { background: var(--glacier); color: #0d1620; border-color: var(--glacier); }
+
+  body.view-profile .sec-map { display: none !important; }
+  body:not(.view-profile) .sec-profile { display: none; }
+  body.view-profile #map, body.view-profile #worn, body.view-profile #frame,
+  body.view-profile #gate, body.view-profile #exportOverlay { display: none !important; }
+
+  #profilePanel {
+    display: none; position: absolute; inset: 0; overflow-y: auto;
+    padding: 24px; background: var(--ink);
+  }
+  body.view-profile #profilePanel { display: block; }
+  .pcard {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 14px; margin-bottom: 18px;
+  }
+  .pcard .p-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+  .pcard .p-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pcard .p-dl { width: auto; padding: 7px 14px; font-size: 12px; flex: none; }
+  .pcard canvas {
+    display: block; width: 100%; height: auto; border-radius: 4px;
+    background: repeating-conic-gradient(#e3e3e3 0% 25%, #f6f6f6 0% 50%) 0 0 / 18px 18px;
+  }
+  .profile-empty {
+    color: var(--muted); font-size: 13px; line-height: 1.6; max-width: 430px;
+    margin: 60px auto; text-align: center;
+  }
+  .cut-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .cut-row .cut-lab { font-size: 11px; color: var(--muted); flex: none; width: 54px; }
+  .cut-row select { flex: 1; padding: 6px 8px; font-size: 12px; }
+  .sec-profile input[type="text"] {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 6px; color: var(--text); padding: 8px 10px; font-size: 13px;
+  }
+  .sec-profile input[type="text"]:focus { outline: 1px solid var(--glacier); }
+  .num2 { display: flex; gap: 8px; }
+
   main { flex: 1; position: relative; }
   #map { position: absolute; inset: 0; }
 
@@ -159,9 +203,13 @@
   <div class="brand">
     <h1>Tool per stampare le cartine e le mappe degli eventi</h1>
     <p>Realizza l'esportazione con le tracce .gpx dell'evento</p>
+    <div class="viewtab">
+      <button id="tabMap" class="on">Mappa</button>
+      <button id="tabProfile">Altimetria</button>
+    </div>
   </div>
 
-  <div class="section">
+  <div class="section sec-map">
     <h2>Stile della mappa</h2>
     <select id="styleSel">
       <option value="mapbox://styles/mapbox/outdoors-v12" selected>Outdoors · toponimi, rilievo, parchi (consigliato)</option>
@@ -172,7 +220,7 @@
     <p class="hint">Inquadra a piacere: quello che vedi dentro la cornice bianca è quello che verrà stampato.</p>
   </div>
 
-  <div class="section">
+  <div class="section sec-map">
     <h2>Carattere della mappa</h2>
 
     <div class="slider-head">
@@ -211,7 +259,7 @@
     <p class="hint">Sterrate in tratteggio marrone, sentieri e mulattiere in punteggiato rosso. Nota: i dati dei sentieri arrivano nelle tile solo avvicinando lo zoom (circa da livello 11-12 in su); su inquadrature ampie usa il "Dettaglio off-road nell'export" per tirarli dentro nella stampa.</p>
   </div>
 
-  <div class="section">
+  <div class="section sec-map">
     <h2>Formato di stampa</h2>
     <div class="row">
       <div>
@@ -253,28 +301,106 @@
     <div id="trackList"></div>
     <p class="track-order-hint" id="orderHint" style="display:none">La prima traccia caricata sta sopra a tutte le altre sulla mappa.</p>
 
-    <div class="slider-head" style="margin-top:12px">
-      <label for="widthSlider">Spessore tracce</label>
-      <span class="slider-val" id="widthVal">3</span>
-    </div>
-    <input type="range" id="widthSlider" min="1" max="8" step="0.5" value="3">
+    <div class="sec-map">
+      <div class="slider-head" style="margin-top:12px">
+        <label for="widthSlider">Spessore tracce</label>
+        <span class="slider-val" id="widthVal">3</span>
+      </div>
+      <input type="range" id="widthSlider" min="1" max="8" step="0.5" value="3">
 
-    <div class="slider-head" style="margin-top:12px">
-      <label for="arrowsChk">Frecce di direzione</label>
-      <input type="checkbox" id="arrowsChk" checked>
+      <div class="slider-head" style="margin-top:12px">
+        <label for="arrowsChk">Frecce di direzione</label>
+        <input type="checkbox" id="arrowsChk" checked>
+      </div>
     </div>
   </div>
 
-  <div class="section">
+  <div class="section sec-profile">
+    <h2>Punti sul profilo</h2>
+    <div class="gpx-drop" id="poiDrop">Trascina qui il GPX dei punti<br>(paesi, passi, luoghi) oppure clicca</div>
+    <input type="file" id="poiFile" accept=".gpx" multiple style="display:none">
+    <p class="hint" id="poiCount">Nessun punto caricato.</p>
+    <button id="poiClear" style="display:none; margin-top:8px; background:var(--panel-2); color:var(--muted); border:1px solid var(--line);">Svuota i punti</button>
+
+    <div class="slider-head" style="margin-top:12px">
+      <label for="poiDistSlider">Distanza massima dal percorso</label>
+      <span class="slider-val" id="poiDistVal">600 m</span>
+    </div>
+    <input type="range" id="poiDistSlider" min="100" max="2000" step="50" value="600">
+    <p class="hint">I punti più lontani di così dalla traccia non compaiono sul profilo.</p>
+  </div>
+
+  <div class="section sec-profile">
+    <h2>Altimetria</h2>
+    <label for="profTrackSel">Percorso</label>
+    <select id="profTrackSel"></select>
+
+    <div class="slider-head">
+      <label for="cutsSlider">Numero di tratti</label>
+      <span class="slider-val" id="cutsVal">1</span>
+    </div>
+    <input type="range" id="cutsSlider" min="1" max="8" value="1">
+
+    <div class="slider-head" style="margin-top:12px">
+      <label for="snapChk">Taglia in corrispondenza di un paese</label>
+      <input type="checkbox" id="snapChk" checked>
+    </div>
+    <div id="cutList"></div>
+    <p class="hint" id="cutHint" style="display:none">Ogni taglio si può spostare su un altro paese vicino o sull'intervallo esatto.</p>
+
+    <label style="margin-top:14px">Totali stampati sul profilo intero (vuoti = calcolati dal GPX)</label>
+    <div class="num2">
+      <input id="ovrKm" type="text" inputmode="decimal" placeholder="km">
+      <input id="ovrDplus" type="text" inputmode="numeric" placeholder="m D+">
+    </div>
+    <p class="hint">Per riportare i valori ufficiali dell'evento al posto di quelli ricavati dal GPX.</p>
+  </div>
+
+  <div class="section sec-profile">
+    <h2>Esportazione del profilo</h2>
+    <div class="row">
+      <div>
+        <label for="profWCm">Larghezza (cm)</label>
+        <input id="profWCm" type="text" inputmode="decimal" value="28">
+      </div>
+      <div>
+        <label for="profHCm">Altezza (cm)</label>
+        <input id="profHCm" type="text" inputmode="decimal" value="9">
+      </div>
+    </div>
+    <label for="profDpiSel">Risoluzione</label>
+    <select id="profDpiSel">
+      <option value="150">150 DPI · buona</option>
+      <option value="200">200 DPI · ottima</option>
+      <option value="300" selected>300 DPI · tipografia</option>
+    </select>
+    <div class="slider-head" style="margin-top:12px">
+      <label for="transChk">Sfondo trasparente (per il montaggio)</label>
+      <input type="checkbox" id="transChk" checked>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <div><button class="btn-primary" id="profDlAll">Tutti i PNG</button></div>
+      <div><button class="btn-primary" id="profDlAllSvg" style="background:var(--panel-2); color:var(--text); border:1px solid var(--line);">Tutti gli SVG</button></div>
+    </div>
+    <p class="hint">L'SVG è vettoriale, si apre in Illustrator con griglia, profilo, punti ed etichette su livelli separati, già alla dimensione in cm scelta sopra.</p>
+    <div class="status" id="profStatus"></div>
+  </div>
+
+  <div class="section sec-map" style="border-top:1px solid var(--line)">
     <button class="btn-primary" id="exportBtn" disabled>Esporta PNG per la stampa</button>
     <div class="status" id="status"></div>
   </div>
 
-  <div class="coords" id="coords"></div>
+  <div class="coords sec-map" id="coords"></div>
 </aside>
 
 <main>
   <div id="map"></div>
+  <div id="profilePanel">
+    <p class="hint" id="profSummary" style="margin:0 0 14px"></p>
+    <div class="profile-empty" id="profileEmpty">Carica almeno una traccia GPX dal pannello a sinistra.<br>Poi aggiungi il GPX dei punti (paesi e passi) per farli comparire sul profilo.</div>
+    <div id="profileCards"></div>
+  </div>
   <div id="worn"></div>
   <div id="frame"><span class="tag" id="frameTag"></span></div>
   <div id="gate">
@@ -297,10 +423,10 @@
 
 <script>
 (function () {
-  // Token pubblico Mapbox (pk.…). Nel repository resta vuoto: la pagina lo
-  // chiede al primo avvio e lo conserva nel browser. Chi fa un fork può
-  // scriverlo qui, impostando le restrizioni URL su account.mapbox.com.
-  var TOKEN = "";
+  // Token pubblico Mapbox (pk.…) di AdventureLab. Proteggerlo con le
+  // restrizioni URL su account.mapbox.com. Se viene revocato o rifiutato,
+  // la pagina ne chiede uno nuovo e lo conserva nel browser.
+  var TOKEN = "pk.eyJ1IjoiYmlrZXBhY2tpbmciLCJhIjoiY2l5em91N3M3MDRiZjJxcWZ1Z2cyeWt0NSJ9._UMvkovRxxP7hpH1_vixDQ";
 
   var map = null;
 
@@ -673,13 +799,23 @@
     };
   }
 
+  // Il limite si interroga UNA volta sola e si rilascia il contesto WebGL:
+  // crearne uno a ogni chiamata esaurisce i contesti del browser e uccide
+  // la mappa Mapbox dopo una quindicina di rendering.
+  var _maxCanvasSide = null;
   function maxCanvasSide() {
+    if (_maxCanvasSide) return _maxCanvasSide;
     try {
       var c = document.createElement("canvas");
       var gl = c.getContext("webgl") || c.getContext("experimental-webgl");
-      if (gl) return gl.getParameter(gl.MAX_TEXTURE_SIZE) || 8192;
+      if (gl) {
+        _maxCanvasSide = gl.getParameter(gl.MAX_TEXTURE_SIZE) || 8192;
+        var ext = gl.getExtension("WEBGL_lose_context");
+        if (ext) ext.loseContext();
+      }
     } catch (e) {}
-    return 8192;
+    if (!_maxCanvasSide) _maxCanvasSide = 8192;
+    return _maxCanvasSide;
   }
 
   function updatePxHint() {
@@ -789,20 +925,59 @@
   }
 
   /* ================= Tracce GPX multiple ================= */
+  // Restituisce { tracks: [{feature, elev, name}], wpts }: una entry per ogni
+  // <trk> del file (un GPX multi-traccia NON va cucito in una riga sola),
+  // più i waypoint (per l'altimetria).
   function parseGpx(text) {
     var doc = new DOMParser().parseFromString(text, "application/xml");
     if (doc.querySelector("parsererror")) return null;
-    var pts = doc.getElementsByTagName("trkpt");
-    if (!pts.length) pts = doc.getElementsByTagName("rtept");
-    if (!pts.length) return null;
-    var coords = [];
-    for (var i = 0; i < pts.length; i++) {
-      var lat = parseFloat(pts[i].getAttribute("lat"));
-      var lon = parseFloat(pts[i].getAttribute("lon"));
-      if (!isNaN(lat) && !isNaN(lon)) coords.push([lon, lat]);
+    var out = { tracks: [], wpts: [] };
+    var groups = [];
+    var trks = doc.getElementsByTagName("trk");
+    for (var ti = 0; ti < trks.length; ti++) {
+      var tn = trks[ti].getElementsByTagName("name")[0];
+      groups.push({ pts: trks[ti].getElementsByTagName("trkpt"), name: tn ? tn.textContent.trim() : "" });
     }
-    if (coords.length < 2) return null;
-    return { type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} };
+    if (!groups.length) {
+      var rpts = doc.getElementsByTagName("rtept");
+      if (rpts.length) groups.push({ pts: rpts, name: "" });
+    }
+    groups.forEach(function (g) {
+      var coords = [], elev = [];
+      for (var i = 0; i < g.pts.length; i++) {
+        var lat = parseFloat(g.pts[i].getAttribute("lat"));
+        var lon = parseFloat(g.pts[i].getAttribute("lon"));
+        if (isNaN(lat) || isNaN(lon)) continue;
+        coords.push([lon, lat]);
+        var eleEl = g.pts[i].getElementsByTagName("ele")[0];
+        var ele = eleEl ? parseFloat(eleEl.textContent) : NaN;
+        elev.push(isNaN(ele) ? null : ele);
+      }
+      if (coords.length >= 2) {
+        out.tracks.push({
+          feature: { type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} },
+          elev: elev,
+          name: g.name
+        });
+      }
+    });
+    var wels = doc.getElementsByTagName("wpt");
+    for (var j = 0; j < wels.length; j++) {
+      var wlat = parseFloat(wels[j].getAttribute("lat"));
+      var wlon = parseFloat(wels[j].getAttribute("lon"));
+      if (isNaN(wlat) || isNaN(wlon)) continue;
+      var nameEl = wels[j].getElementsByTagName("name")[0];
+      var symEl = wels[j].getElementsByTagName("sym")[0];
+      var weleEl = wels[j].getElementsByTagName("ele")[0];
+      out.wpts.push({
+        name: nameEl ? nameEl.textContent.trim() : "Punto",
+        lat: wlat, lon: wlon,
+        ele: weleEl ? parseFloat(weleEl.textContent) : null,
+        sym: symEl ? symEl.textContent.trim() : ""
+      });
+    }
+    if (!out.tracks.length && !out.wpts.length) return null;
+    return out;
   }
 
   function isLightColor(hex) {
@@ -824,7 +999,10 @@
   // Ridisegna tutte le tracce. Ordine: l'ultima dell'elenco viene aggiunta per
   // prima (sotto), la prima per ultima (sopra). Tutte sotto le etichette.
   function rebuildTracks(m) {
-    if (!m || !m.isStyleLoaded || !m.getStyle()) return;
+    if (!m || !m.getStyle) return;
+    var st = null;
+    try { st = m.getStyle(); } catch (e) {}
+    if (!st) return;
     removeTrackLayers(m);
     var anchor = aboveLinesAnchor(m);
     var w = trackWidth();
@@ -907,6 +1085,7 @@
             map.setPaintProperty("gpx-arrows-" + t.id, "text-halo-color", t.color);
           } catch (e) { rebuildTracks(map); }
         }
+        renderProfileSoon();
       });
 
       var x = document.createElement("button");
@@ -923,6 +1102,8 @@
         tracks = tracks.filter(function (q) { return q.id !== t.id; });
         renderTrackList();
         if (map) rebuildTracks(map);
+        updateProfTrackSel();
+        renderProfileSoon();
       });
 
       item.appendChild(dot);
@@ -934,43 +1115,780 @@
     $("orderHint").style.display = tracks.length > 1 ? "block" : "none";
   }
 
+  // Feedback del caricamento visibile in entrambe le viste
+  function loadFeedback(msg, type) {
+    setStatus(msg, type);
+    setProfStatus(msg, type);
+  }
+
+  var pendingFit = false;
+  function fitTracks() {
+    if (!map || !map.isStyleLoaded()) return;
+    try {
+      rebuildTracks(map);
+      var b = new mapboxgl.LngLatBounds();
+      tracks.forEach(function (t) {
+        t.geojson.geometry.coordinates.forEach(function (c) { b.extend(c); });
+      });
+      map.fitBounds(b, { padding: 60 });
+    } catch (e) {}
+  }
+  function requestFitTracks() {
+    // con la mappa nascosta (vista Altimetria) il viewport è fittizio:
+    // si rimanda l'inquadratura al rientro nella vista mappa
+    if (document.body.classList.contains("view-profile")) { pendingFit = true; return; }
+    fitTracks();
+  }
+
   function handleGpxFiles(fileList) {
     var files = Array.prototype.slice.call(fileList);
     var pending = files.length;
-    var added = 0;
-    files.forEach(function (file) {
-      var reader = new FileReader();
-      reader.onload = function () {
-        var feature = parseGpx(reader.result);
-        pending--;
-        if (feature) {
+    var results = new Array(files.length);
+    function done() {
+      pending--;
+      if (pending !== 0) return;
+      var addedTracks = 0, addedPois = 0, parsedAny = false;
+      results.forEach(function (parsed, fi) {
+        if (!parsed) return;
+        parsedAny = true;
+        var base = files[fi].name.replace(/\.gpx$/i, "");
+        (parsed.tracks || []).forEach(function (tr, ti) {
+          var tname = parsed.tracks.length > 1
+            ? (tr.name || base + " (" + (ti + 1) + ")")
+            : base;
           tracks.push({
             id: ++trackSeq,
-            name: file.name.replace(/\.gpx$/i, ""),
+            name: tname,
             color: PALETTE[(tracks.length) % (PALETTE.length - 2)][1],
-            geojson: feature
+            geojson: tr.feature,
+            elev: tr.elev,
+            _prof: null
           });
-          added++;
-        }
-        if (pending === 0) {
-          if (!added) {
-            setStatus("Nessuna traccia leggibile nei file caricati.", "err");
-            return;
-          }
-          clearStatus();
-          renderTrackList();
-          if (map && map.isStyleLoaded()) {
-            rebuildTracks(map);
-            var b = new mapboxgl.LngLatBounds();
-            tracks.forEach(function (t) {
-              t.geojson.geometry.coordinates.forEach(function (c) { b.extend(c); });
-            });
-            map.fitBounds(b, { padding: 60 });
-          }
-        }
+          addedTracks++;
+        });
+        addedPois += addPois(parsed.wpts || []);
+      });
+      if (!parsedAny) {
+        loadFeedback("Nessuna traccia o punto leggibile nei file caricati.", "err");
+        return;
+      }
+      if (!addedTracks && !addedPois) {
+        loadFeedback("Nessun elemento nuovo: tracce e punti erano già caricati.", "info");
+        return;
+      }
+      clearStatus();
+      clearProfStatus();
+      renderTrackList();
+      renderPoiCount();
+      updateProfTrackSel();
+      renderProfileSoon();
+      if (addedTracks && map) requestFitTracks();
+    }
+    files.forEach(function (file, fi) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        results[fi] = parseGpx(reader.result);
+        done();
+      };
+      reader.onerror = reader.onabort = function () {
+        results[fi] = null;
+        done();
       };
       reader.readAsText(file);
     });
+  }
+
+  /* ================= Altimetria ================= */
+  var pois = [];
+  var cutOverrides = {};
+  var profTimer = null;
+
+  function isVillage(p) { return p.sym && p.sym.indexOf("City") === 0; }
+  function sizeRank(p) {
+    if (!p.sym) return 0;
+    if (p.sym.indexOf("Large") !== -1) return 3;
+    if (p.sym.indexOf("Medium") !== -1) return 2;
+    if (p.sym.indexOf("Small") !== -1) return 1;
+    return 0;
+  }
+
+  function fmtInt(n) {
+    return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  }
+  function fmtKm(x) {
+    if (x < 100) {
+      var v = Math.round(x * 10) / 10;
+      return (v % 1 === 0 ? String(v) : String(v).replace(".", ","));
+    }
+    return fmtInt(x);
+  }
+  function slugName(s) {
+    try { s = s.normalize("NFD").replace(/[̀-ͯ]/g, ""); } catch (e) {}
+    return s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "profilo";
+  }
+
+  function haversine(lat1, lon1, lat2, lon2) {
+    var R = 6371000, rad = Math.PI / 180;
+    var dLat = (lat2 - lat1) * rad, dLon = (lon2 - lon1) * rad;
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * rad) * Math.cos(lat2 * rad) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+
+  function addPois(list) {
+    var added = 0;
+    list.forEach(function (w) {
+      var dup = pois.some(function (p) {
+        return p.name === w.name && haversine(p.lat, p.lon, w.lat, w.lon) < 300;
+      });
+      if (!dup) { pois.push(w); added++; }
+    });
+    return added;
+  }
+
+  function renderPoiCount() {
+    var el = $("poiCount");
+    if (!pois.length) {
+      el.textContent = "Nessun punto caricato.";
+      $("poiClear").style.display = "none";
+      return;
+    }
+    var v = pois.filter(isVillage).length;
+    el.textContent = pois.length + " punti caricati · " + v + " paesi, " + (pois.length - v) + " passi e luoghi.";
+    $("poiClear").style.display = "block";
+  }
+
+  // Ricampionamento ogni 50 m, livellamento della quota su una finestra di
+  // 200 m e isteresi di 5 m nel conteggio del dislivello: senza questi filtri
+  // il rumore del GPX gonfia il D+ di parecchio.
+  var SAMPLE_M = 50, SMOOTH_M = 200, HYST_M = 5;
+
+  function prepareProfile(t) {
+    if (t._prof) return t._prof;
+    var c = t.geojson.geometry.coordinates;
+    var el = (t.elev || []).slice();
+    var hasEle = false;
+    for (var i = 0; i < el.length; i++) {
+      if (el[i] != null && !isNaN(el[i])) { hasEle = true; break; }
+    }
+    if (!hasEle || c.length < 2) { t._prof = { noEle: true }; return t._prof; }
+    var last = null;
+    for (i = 0; i < el.length; i++) {
+      if (el[i] == null || isNaN(el[i])) el[i] = last;
+      else last = el[i];
+    }
+    for (i = el.length - 1; i >= 0; i--) {
+      if (el[i] == null) el[i] = last;
+      else last = el[i];
+    }
+    var cum = [0];
+    for (i = 1; i < c.length; i++) {
+      cum.push(cum[i - 1] + haversine(c[i - 1][1], c[i - 1][0], c[i][1], c[i][0]));
+    }
+    var len = cum[cum.length - 1];
+    if (len < 100) { t._prof = { noEle: true }; return t._prof; }
+    var n = Math.max(2, Math.round(len / SAMPLE_M) + 1);
+    var step = len / (n - 1);
+    var ele = new Array(n), lat = new Array(n), lon = new Array(n);
+    var k = 0;
+    for (var s = 0; s < n; s++) {
+      var d = s * step;
+      while (k < c.length - 2 && cum[k + 1] < d) k++;
+      var span = cum[k + 1] - cum[k] || 1;
+      var f = Math.min(1, Math.max(0, (d - cum[k]) / span));
+      ele[s] = el[k] + (el[k + 1] - el[k]) * f;
+      lat[s] = c[k][1] + (c[k + 1][1] - c[k][1]) * f;
+      lon[s] = c[k][0] + (c[k + 1][0] - c[k][0]) * f;
+    }
+    var w = Math.max(1, Math.round(SMOOTH_M / step / 2));
+    var pre = [0];
+    for (i = 0; i < n; i++) pre.push(pre[i] + ele[i]);
+    var sm = new Array(n);
+    for (i = 0; i < n; i++) {
+      var a = Math.max(0, i - w), b = Math.min(n - 1, i + w);
+      sm[i] = (pre[b + 1] - pre[a]) / (b - a + 1);
+    }
+    t._prof = { step: step, len: len, ele: sm, lat: lat, lon: lon };
+    return t._prof;
+  }
+
+  function dplusRange(prof, i0, i1) {
+    var up = 0, ref = prof.ele[i0];
+    for (var i = i0 + 1; i <= i1; i++) {
+      var diff = prof.ele[i] - ref;
+      if (diff >= HYST_M) { up += diff; ref = prof.ele[i]; }
+      else if (diff <= -HYST_M) ref = prof.ele[i];
+    }
+    return up;
+  }
+
+  function projectPois(prof) {
+    var maxDist = parseInt($("poiDistSlider").value, 10);
+    var placed = [];
+    pois.forEach(function (p) {
+      var best = -1, bestD = Infinity;
+      for (var i = 0; i < prof.lat.length; i++) {
+        var d = haversine(p.lat, p.lon, prof.lat[i], prof.lon[i]);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      if (bestD <= maxDist) {
+        placed.push({ poi: p, idx: best, km: best * prof.step / 1000, dist: bestD });
+      }
+    });
+    placed.sort(function (a, b) { return a.km - b.km; });
+    return placed;
+  }
+
+  function currentProfTrack() {
+    var id = parseInt($("profTrackSel").value, 10);
+    for (var i = 0; i < tracks.length; i++) if (tracks[i].id === id) return tracks[i];
+    return tracks[0] || null;
+  }
+
+  function updateProfTrackSel() {
+    var sel = $("profTrackSel");
+    var cur = sel.value;
+    sel.innerHTML = "";
+    tracks.forEach(function (t) {
+      var o = document.createElement("option");
+      o.value = t.id;
+      o.textContent = t.name;
+      sel.appendChild(o);
+    });
+    if (cur && tracks.some(function (t) { return String(t.id) === cur; })) sel.value = cur;
+  }
+
+  // Calcola i tagli: intervalli regolari, agganciati al paese più vicino
+  // (con un bonus per i centri più grandi), e costruisce i menù per spostarli.
+  function buildCuts(t, prof, placed, n, snap) {
+    var list = $("cutList");
+    list.innerHTML = "";
+    $("cutHint").style.display = n > 1 ? "block" : "none";
+    var Lkm = prof.len / 1000;
+    var cuts = [];
+    for (var i = 1; i < n; i++) {
+      var ideal = Lkm * i / n;
+      var win = (Lkm / n) * 0.35;
+      var cands = placed.filter(function (pl) {
+        return isVillage(pl.poi) && Math.abs(pl.km - ideal) <= win;
+      }).slice().sort(function (a, b) {
+        return Math.abs(a.km - ideal) - Math.abs(b.km - ideal);
+      });
+      var key = t.id + ":" + n + ":" + i;
+      var ovr = cutOverrides[key];
+      var chosen = null;
+      if (ovr === "exact") chosen = { km: ideal, name: null };
+      else if (ovr && typeof ovr === "object") {
+        // l'override vale solo finché il paese è ancora tra i candidati
+        // (soglia di distanza o punti possono essere cambiati nel frattempo)
+        var stillValid = cands.some(function (pl) {
+          return pl.poi.name === ovr.name && Math.abs(pl.km - ovr.km) < 0.05;
+        });
+        if (stillValid) chosen = { km: ovr.km, name: ovr.name };
+        else delete cutOverrides[key];
+      }
+      if (!chosen && snap && cands.length) {
+        var best = null, bestScore = Infinity;
+        cands.forEach(function (pl) {
+          var score = Math.abs(pl.km - ideal) - sizeRank(pl.poi) * 1.5;
+          if (score < bestScore) { bestScore = score; best = pl; }
+        });
+        chosen = { km: best.km, name: best.poi.name };
+      }
+      if (!chosen) chosen = { km: ideal, name: null };
+      cuts.push({ key: key, ideal: ideal, km: chosen.km, name: chosen.name, cands: cands });
+    }
+    var prev = 0;
+    cuts.forEach(function (c) {
+      if (c.km <= prev + 0.5) { c.km = Math.max(c.ideal, prev + 0.5); c.name = null; }
+      prev = c.km;
+    });
+    cuts.forEach(function (c, idx) {
+      var row = document.createElement("div");
+      row.className = "cut-row";
+      var lab = document.createElement("span");
+      lab.className = "cut-lab";
+      lab.textContent = "Taglio " + (idx + 1);
+      var sel = document.createElement("select");
+      c.cands.forEach(function (pl, j) {
+        var o = document.createElement("option");
+        o.value = j;
+        o.textContent = pl.poi.name + " · km " + fmtKm(pl.km);
+        if (c.name === pl.poi.name && Math.abs(c.km - pl.km) < 0.05) o.selected = true;
+        sel.appendChild(o);
+      });
+      var ox = document.createElement("option");
+      ox.value = "exact";
+      ox.textContent = "Intervallo esatto · km " + fmtKm(c.ideal);
+      if (c.name == null) ox.selected = true;
+      sel.appendChild(ox);
+      sel.addEventListener("change", function () {
+        if (this.value === "exact") cutOverrides[c.key] = "exact";
+        else {
+          var pl = c.cands[parseInt(this.value, 10)];
+          cutOverrides[c.key] = { km: pl.km, name: pl.poi.name };
+        }
+        renderProfileSoon();
+      });
+      row.appendChild(lab);
+      row.appendChild(sel);
+      list.appendChild(row);
+    });
+    return cuts;
+  }
+
+  function hexToRgba(hex, a) {
+    var r = parseInt(hex.substr(1, 2), 16);
+    var g = parseInt(hex.substr(3, 2), 16);
+    var b = parseInt(hex.substr(5, 2), 16);
+    return "rgba(" + r + "," + g + "," + b + "," + a + ")";
+  }
+
+  function niceStep(rawTarget, steps) {
+    for (var i = 0; i < steps.length; i++) if (steps[i] >= rawTarget) return steps[i];
+    return steps[steps.length - 1];
+  }
+
+  // ===== Doppio backend di disegno: canvas (PNG) e SVG (vettoriale) =====
+  var measureCtx = document.createElement("canvas").getContext("2d");
+  function fontStr(px, weight) {
+    return (weight || 400) + " " + Math.round(px) + "px 'Segoe UI', 'Helvetica Neue', Arial, sans-serif";
+  }
+  function measureText(str, px, weight) {
+    measureCtx.font = fontStr(px, weight);
+    return measureCtx.measureText(str).width;
+  }
+
+  function CanvasPainter(cv, W, H) {
+    cv.width = W; cv.height = H;
+    var ctx = cv.getContext("2d");
+    ctx.clearRect(0, 0, W, H);
+    function stroke(color, w, op) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = w;
+      ctx.globalAlpha = op == null ? 1 : op;
+    }
+    this.bg = function (color) { ctx.fillStyle = color; ctx.fillRect(0, 0, W, H); };
+    this.group = function () {};
+    this.groupEnd = function () {};
+    this.line = function (x1, y1, x2, y2, color, w, op) {
+      stroke(color, w, op);
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    };
+    function tracePath(pts, close) {
+      ctx.beginPath();
+      for (var i = 0; i < pts.length; i++) {
+        if (i) ctx.lineTo(pts[i][0], pts[i][1]); else ctx.moveTo(pts[i][0], pts[i][1]);
+      }
+      if (close) ctx.closePath();
+    }
+    this.polyline = function (pts, color, w) {
+      stroke(color, w);
+      ctx.lineJoin = "round"; ctx.lineCap = "round";
+      tracePath(pts, false);
+      ctx.stroke();
+    };
+    this.area = function (pts, colorHex, yTop, yBot) {
+      var g = ctx.createLinearGradient(0, yTop, 0, yBot);
+      g.addColorStop(0, hexToRgba(colorHex, 0.42));
+      g.addColorStop(1, hexToRgba(colorHex, 0.04));
+      tracePath(pts, true);
+      ctx.fillStyle = g;
+      ctx.fill();
+    };
+    this.circle = function (x, y, r, fill, strokeC, sw, strokeOp) {
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = fill; ctx.fill();
+      if (strokeC) {
+        stroke(strokeC, sw, strokeOp);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    };
+    this.poly = function (pts, fill) {
+      tracePath(pts, true);
+      ctx.fillStyle = fill;
+      ctx.fill();
+    };
+    this.text = function (str, x, y, px, weight, color, align, baseline) {
+      ctx.font = fontStr(px, weight);
+      ctx.fillStyle = color;
+      ctx.textAlign = align || "left";
+      ctx.textBaseline = baseline || "alphabetic";
+      ctx.fillText(str, x, y);
+    };
+  }
+
+  function SvgPainter(W, H, wcm, hcm) {
+    var out = [], defs = [], gid = 0, open = false;
+    function esc(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+    function n2(v) { return Math.round(v * 100) / 100; }
+    function dOf(pts, close) {
+      var d = "M" + n2(pts[0][0]) + " " + n2(pts[0][1]);
+      for (var i = 1; i < pts.length; i++) d += "L" + n2(pts[i][0]) + " " + n2(pts[i][1]);
+      return d + (close ? "Z" : "");
+    }
+    this.bg = function (color) {
+      out.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="' + color + '"/>');
+    };
+    this.group = function (name) {
+      if (open) out.push("</g>");
+      out.push('<g id="' + name + '">');
+      open = true;
+    };
+    this.groupEnd = function () {
+      if (open) { out.push("</g>"); open = false; }
+    };
+    this.line = function (x1, y1, x2, y2, color, w, op) {
+      out.push('<line x1="' + n2(x1) + '" y1="' + n2(y1) + '" x2="' + n2(x2) + '" y2="' + n2(y2) +
+        '" stroke="' + color + '" stroke-width="' + n2(w) + (op != null ? '" stroke-opacity="' + op : "") + '"/>');
+    };
+    this.polyline = function (pts, color, w) {
+      out.push('<path d="' + dOf(pts) + '" fill="none" stroke="' + color + '" stroke-width="' + n2(w) +
+        '" stroke-linejoin="round" stroke-linecap="round"/>');
+    };
+    this.area = function (pts, colorHex, yTop, yBot) {
+      var id = "grad" + (++gid);
+      defs.push('<linearGradient id="' + id + '" x1="0" y1="' + n2(yTop) + '" x2="0" y2="' + n2(yBot) +
+        '" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="' + colorHex +
+        '" stop-opacity="0.42"/><stop offset="1" stop-color="' + colorHex + '" stop-opacity="0.04"/></linearGradient>');
+      out.push('<path d="' + dOf(pts, true) + '" fill="url(#' + id + ')"/>');
+    };
+    this.circle = function (x, y, r, fill, strokeC, sw, strokeOp) {
+      out.push('<circle cx="' + n2(x) + '" cy="' + n2(y) + '" r="' + n2(r) + '" fill="' + fill + '"' +
+        (strokeC ? ' stroke="' + strokeC + '" stroke-width="' + n2(sw) +
+          (strokeOp != null ? '" stroke-opacity="' + strokeOp : "") + '"' : "") + '/>');
+    };
+    this.poly = function (pts, fill) {
+      out.push('<path d="' + dOf(pts, true) + '" fill="' + fill + '"/>');
+    };
+    this.text = function (str, x, y, px, weight, color, align, baseline) {
+      var anchor = align === "center" ? "middle" : (align === "right" ? "end" : "start");
+      var base = baseline === "middle" ? ' dominant-baseline="central"' :
+                 (baseline === "top" ? ' dominant-baseline="hanging"' : "");
+      out.push('<text x="' + n2(x) + '" y="' + n2(y) +
+        '" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="' + Math.round(px) +
+        '" font-weight="' + (weight || 400) + '" fill="' + color + '" text-anchor="' + anchor + '"' + base + '>' +
+        esc(str) + "</text>");
+    };
+    this.svg = function () {
+      this.groupEnd();
+      return '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="' + wcm +
+        'cm" height="' + hcm + 'cm" viewBox="0 0 ' + W + " " + H + '">' +
+        (defs.length ? "<defs>" + defs.join("") + "</defs>" : "") + out.join("") + "</svg>";
+    };
+  }
+
+  // Disegna un tratto di profilo alla risoluzione di stampa, su qualunque
+  // painter. Tutte le misure sono in unità U = altezza/640, così il disegno
+  // scala identico a qualunque DPI e nel vettoriale.
+  function renderStrip(p, o) {
+    var W = o.wPx, H = o.hPx;
+    var U = H / 640;
+    var INK = "#26303a", MUT = "#5a6672";
+    if (!o.transparent) p.bg("#ffffff");
+
+    var padL = 96 * U, padR = 56 * U, padT = 128 * U, padB = 82 * U;
+    var pw = W - padL - padR, ph = H - padT - padB;
+    var prof = o.prof, i0 = o.i0, i1 = o.i1;
+    var km0 = i0 * prof.step / 1000, km1 = i1 * prof.step / 1000;
+
+    var minE = Infinity, maxE = -Infinity;
+    for (var i = i0; i <= i1; i++) {
+      var e = prof.ele[i];
+      if (e < minE) minE = e;
+      if (e > maxE) maxE = e;
+    }
+    var range = Math.max(120, maxE - minE);
+    var yStep = niceStep(range / 5, [50, 100, 200, 250, 500, 1000]);
+    var yMin = Math.floor((minE - range * 0.05) / yStep) * yStep;
+    if (yMin < 0 && minE >= 0) yMin = 0;
+    var yMax = Math.ceil((maxE + range * 0.08) / yStep) * yStep;
+    if (yMax <= yMin) yMax = yMin + yStep;
+    var yOf = function (ev) { return padT + ph * (1 - (ev - yMin) / (yMax - yMin)); };
+    var xOf = function (km) { return padL + pw * (km - km0) / (km1 - km0 || 1); };
+
+    p.group("griglia");
+    for (var yv = yMin; yv <= yMax + 0.01; yv += yStep) {
+      var yy = yOf(yv);
+      p.line(padL, yy, W - padR, yy, INK, 1.4 * U, 0.10);
+      p.text(fmtInt(yv) + " m", padL - 12 * U, yy, 20 * U, 400, MUT, "right", "middle");
+    }
+    var kmSpan = km1 - km0 || 1;
+    var xStep = niceStep(kmSpan / Math.max(2, pw / (130 * U)), [1, 2, 5, 10, 20, 25, 50, 100]);
+    var xt = [];
+    for (var kv = Math.ceil(km0 / xStep) * xStep; kv <= km1 + 0.01; kv += xStep) xt.push(kv);
+    xt.forEach(function (kt, ti) {
+      var xx = xOf(kt);
+      p.line(xx, padT, xx, padT + ph, INK, 1.4 * U, 0.06);
+      p.text(fmtKm(kt) + (ti === xt.length - 1 ? " km" : ""), xx, padT + ph + 12 * U, 20 * U, 400, MUT, "center", "top");
+    });
+
+    // profilo: nel vettoriale decimiamo i punti per tenere il file leggero,
+    // la resa a queste larghezze è identica
+    var strideN = Math.max(1, Math.ceil((i1 - i0) / 2500));
+    var linePts = [];
+    for (i = i0; i < i1; i += strideN) {
+      linePts.push([xOf(i * prof.step / 1000), yOf(prof.ele[i])]);
+    }
+    linePts.push([xOf(km1), yOf(prof.ele[i1])]);
+    var areaPts = [[xOf(km0), padT + ph]].concat(linePts, [[xOf(km1), padT + ph]]);
+
+    p.group("profilo");
+    p.area(areaPts, o.color, padT, padT + ph);
+    p.polyline(linePts, o.color, 4 * U);
+    p.line(padL, padT + ph, W - padR, padT + ph, INK, 2 * U);
+
+    // punti di interesse: pallino per i paesi, triangolo per passi e luoghi,
+    // etichette su tre file con filo di richiamo per non sovrapporle
+    var tiers = [null, null, null];
+    var items = [];
+    o.pois.forEach(function (pl) {
+      if (pl.idx < i0 || pl.idx > i1) return;
+      var x = xOf(pl.km), y = yOf(prof.ele[pl.idx]);
+      var vill = isVillage(pl.poi);
+      var wgt = (!vill || sizeRank(pl.poi) >= 2) ? 600 : 400;
+      var wtxt = measureText(pl.poi.name, 21 * U, wgt);
+      var cx = Math.min(Math.max(x, padL + wtxt / 2 + 4 * U), W - padR - wtxt / 2 - 4 * U);
+      var tier = -1;
+      for (var tr = 0; tr < 3; tr++) {
+        if (tiers[tr] == null || cx - wtxt / 2 > tiers[tr] + 10 * U) { tier = tr; break; }
+      }
+      if (tier !== -1) tiers[tier] = cx + wtxt / 2;
+      items.push({ x: x, y: y, vill: vill, name: pl.poi.name, wgt: wgt, cx: cx, tier: tier });
+    });
+
+    p.group("punti");
+    items.forEach(function (it) {
+      if (it.vill) {
+        p.circle(it.x, it.y, 5.5 * U, INK, "#ffffff", 2.2 * U, o.transparent ? 0.9 : 1);
+      } else {
+        p.poly([[it.x, it.y - 16 * U], [it.x - 7 * U, it.y - 4 * U], [it.x + 7 * U, it.y - 4 * U]], INK);
+      }
+    });
+
+    p.group("etichette");
+    items.forEach(function (it) {
+      if (it.tier === -1) return;
+      var ly = padT + (30 + it.tier * 27) * U;
+      var topY = ly + 7 * U;
+      var botY = it.vill ? it.y - 10 * U : it.y - 20 * U;
+      if (botY > topY + 6 * U) p.line(it.x, topY, it.x, botY, INK, 1.2 * U, 0.30);
+      p.text(it.name, it.cx, ly, 21 * U, it.wgt, INK, "center");
+    });
+
+    p.group("intestazione");
+    // su strisce strette titolo e totali si contendono la riga:
+    // si riduce il corpo finché convivono
+    var tW = measureText(o.title, 34 * U, 700);
+    var sW = measureText(o.stats, 30 * U, 700);
+    var hs = Math.min(1, (W - padL - padR - 30 * U) / ((tW + sW) || 1));
+    var hs2 = Math.max(hs, 0.75);
+    p.text(o.title, padL, 52 * U, 34 * U * hs, 700, INK, "left");
+    if (o.subtitle) p.text(o.subtitle, padL, 88 * U, 23 * U * hs2, 400, MUT, "left");
+    p.text(o.stats, W - padR, 52 * U, 30 * U * hs, 700, INK, "right");
+    if (o.statsSub) p.text(o.statsSub, W - padR, 88 * U, 21 * U * hs2, 400, MUT, "right");
+    p.groupEnd();
+  }
+
+  function drawStrip(cv, o) {
+    renderStrip(new CanvasPainter(cv, o.wPx, o.hPx), o);
+  }
+  function buildStripSvg(o, wcm, hcm) {
+    var p = new SvgPainter(o.wPx, o.hPx, wcm, hcm);
+    renderStrip(p, o);
+    return p.svg();
+  }
+
+  function setProfStatus(msg, type) {
+    var el = $("profStatus");
+    el.textContent = msg;
+    el.className = "status show " + (type || "info");
+  }
+  function clearProfStatus() { $("profStatus").className = "status"; }
+
+  function profSpec() {
+    var wcm = parseFloat(($("profWCm").value || "").replace(",", "."));
+    var hcm = parseFloat(($("profHCm").value || "").replace(",", "."));
+    if (!(wcm > 0)) wcm = 28;
+    if (!(hcm > 0)) hcm = 9;
+    wcm = Math.min(200, Math.max(5, wcm));
+    hcm = Math.min(200, Math.max(3, hcm));
+    var dpi = parseInt($("profDpiSel").value, 10);
+    return { wcm: wcm, hcm: hcm, dpi: dpi, wPx: Math.round(wcm / 2.54 * dpi), hPx: Math.round(hcm / 2.54 * dpi) };
+  }
+
+  function nearName(placed, km, tolKm) {
+    var best = null, bd = Infinity;
+    placed.forEach(function (pl) {
+      if (!isVillage(pl.poi)) return;
+      var d = Math.abs(pl.km - km);
+      if (d < bd) { bd = d; best = pl; }
+    });
+    return best && bd <= tolKm ? best.poi.name : null;
+  }
+
+  function downloadSvg(svgText, name) {
+    var b = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
+    var url = URL.createObjectURL(b);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+  }
+
+  // Sincrono (toDataURL) così i download partono dentro il gesto dell'utente:
+  // con setTimeout o toBlob Chrome blocca i download successivi al primo.
+  function downloadCanvas(cv, name) {
+    var a = document.createElement("a");
+    try {
+      a.href = cv.toDataURL("image/png");
+    } catch (e) {
+      setProfStatus("Esportazione fallita: immagine troppo grande per il browser.", "err");
+      return;
+    }
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  function sectionFileName(t, s, n, ext) {
+    return slugName(t.name) + (n === 1 ? "_altimetria" : "_tratto_" + (s + 1) + "_di_" + n) + "." + (ext || "png");
+  }
+
+  // Sezioni dell'ultimo rendering, per i pulsanti "scarica tutti"
+  var lastSections = [];
+
+  function renderProfileSoon() {
+    if (!document.body.classList.contains("view-profile")) return;
+    clearTimeout(profTimer);
+    profTimer = setTimeout(renderProfile, 140);
+  }
+
+  function renderProfile() {
+    var cardsEl = $("profileCards"), emptyEl = $("profileEmpty"), sumEl = $("profSummary");
+    cardsEl.innerHTML = "";
+    sumEl.textContent = "";
+    lastSections = [];
+    var t = currentProfTrack();
+    if (!t) {
+      emptyEl.style.display = "block";
+      emptyEl.innerHTML = "Carica almeno una traccia GPX dal pannello a sinistra.<br>Poi aggiungi il GPX dei punti (paesi e passi) per farli comparire sul profilo.";
+      $("cutList").innerHTML = "";
+      $("cutHint").style.display = "none";
+      return;
+    }
+    var prof = prepareProfile(t);
+    if (prof.noEle) {
+      emptyEl.style.display = "block";
+      emptyEl.textContent = "La traccia “" + t.name + "” non contiene le quote: serve un GPX con il dato di elevazione.";
+      $("cutList").innerHTML = "";
+      return;
+    }
+    emptyEl.style.display = "none";
+    var spec = profSpec();
+    var limit = maxCanvasSide();
+    if (Math.max(spec.wPx, spec.hPx) > limit) {
+      setProfStatus("Formato oltre il limite della scheda grafica (" + limit + " px per lato): riduci DPI o dimensioni.", "err");
+      return;
+    }
+    var placed = projectPois(prof);
+    var n = parseInt($("cutsSlider").value, 10);
+    var snap = $("snapChk").checked;
+    var cuts = buildCuts(t, prof, placed, n, snap);
+
+    var Lkm = prof.len / 1000;
+    var totD = dplusRange(prof, 0, prof.ele.length - 1);
+    sumEl.textContent = t.name + " · dal GPX: " + fmtKm(Lkm) + " km, " + fmtInt(totD) + " m D+ · " + placed.length + " punti agganciati al profilo";
+
+    var bounds = [0];
+    cuts.forEach(function (c) {
+      bounds.push(Math.min(prof.ele.length - 1, Math.max(1, Math.round(c.km * 1000 / prof.step))));
+    });
+    bounds.push(prof.ele.length - 1);
+
+    var startName = nearName(placed, 0, 3) || "Partenza";
+    var endName = nearName(placed, Lkm, 3) || "Arrivo";
+
+    for (var s = 0; s < n; s++) {
+      var i0 = bounds[s], i1 = bounds[s + 1];
+      if (i1 <= i0) continue;
+      var kmA = i0 * prof.step / 1000, kmB = i1 * prof.step / 1000;
+      var title, subtitle, stats, statsSub;
+      if (n === 1) {
+        title = t.name;
+        subtitle = startName + " → " + endName;
+        var okm = ($("ovrKm").value || "").trim();
+        var od = ($("ovrDplus").value || "").trim();
+        stats = (okm || fmtKm(Lkm)) + " km · " + (od || fmtInt(totD)) + " m D+";
+        statsSub = "";
+      } else {
+        var fromN = s === 0 ? startName : (cuts[s - 1].name || "km " + fmtKm(kmA));
+        var toN = s === n - 1 ? endName : (cuts[s].name || "km " + fmtKm(kmB));
+        title = t.name + " · Tratto " + (s + 1) + " di " + n;
+        subtitle = fromN + " → " + toN;
+        stats = fmtKm(kmB - kmA) + " km · " + fmtInt(dplusRange(prof, i0, i1)) + " m D+";
+        statsSub = "dal km " + fmtKm(kmA) + " al km " + fmtKm(kmB);
+      }
+      var opts = {
+        prof: prof, i0: i0, i1: i1, color: t.color, pois: placed,
+        title: title, subtitle: subtitle, stats: stats, statsSub: statsSub,
+        wPx: spec.wPx, hPx: spec.hPx, transparent: $("transChk").checked
+      };
+      var card = document.createElement("div");
+      card.className = "pcard";
+      var head = document.createElement("div");
+      head.className = "p-head";
+      var pt = document.createElement("span");
+      pt.className = "p-title";
+      pt.textContent = title + (subtitle ? " — " + subtitle : "");
+      var dlPng = document.createElement("button");
+      dlPng.className = "btn-primary p-dl";
+      dlPng.textContent = "PNG";
+      var dlSvg = document.createElement("button");
+      dlSvg.className = "btn-primary p-dl";
+      dlSvg.style.cssText = "background:var(--panel-2); color:var(--text); border:1px solid var(--line);";
+      dlSvg.textContent = "SVG";
+      head.appendChild(pt);
+      head.appendChild(dlPng);
+      head.appendChild(dlSvg);
+      var cv = document.createElement("canvas");
+      drawStrip(cv, opts);
+      lastSections.push({ opts: opts, spec: spec, pngName: sectionFileName(t, s, n, "png"), svgName: sectionFileName(t, s, n, "svg"), canvas: cv });
+      (function (canvas, so) {
+        dlPng.addEventListener("click", function () { downloadCanvas(canvas, so.pngName); });
+        dlSvg.addEventListener("click", function () { downloadSvg(buildStripSvg(so.opts, so.spec.wcm, so.spec.hcm), so.svgName); });
+      })(cv, lastSections[lastSections.length - 1]);
+      card.appendChild(head);
+      card.appendChild(cv);
+      cardsEl.appendChild(card);
+    }
+    clearProfStatus();
+  }
+
+  function setView(v) {
+    var prof = v === "profile";
+    document.body.classList.toggle("view-profile", prof);
+    $("tabMap").classList.toggle("on", !prof);
+    $("tabProfile").classList.toggle("on", prof);
+    if (prof) {
+      clearTimeout(profTimer);
+      renderProfile();
+    } else if (map) {
+      try { map.resize(); } catch (e) {}
+      if (pendingFit) {
+        pendingFit = false;
+        setTimeout(fitTracks, 80);
+      }
+    }
   }
 
   /* ================= Export ad alta risoluzione ================= */
@@ -1153,6 +2071,57 @@
   });
 
   $("exportBtn").addEventListener("click", exportPng);
+
+  /* Eventi della vista Altimetria */
+  $("tabMap").addEventListener("click", function () { setView("map"); });
+  $("tabProfile").addEventListener("click", function () { setView("profile"); });
+
+  var poiDrop = $("poiDrop");
+  poiDrop.addEventListener("click", function () { $("poiFile").click(); });
+  $("poiFile").addEventListener("change", function () {
+    if (this.files.length) handleGpxFiles(this.files);
+    this.value = "";
+  });
+  poiDrop.addEventListener("dragover", function (e) { e.preventDefault(); poiDrop.classList.add("over"); });
+  poiDrop.addEventListener("dragleave", function () { poiDrop.classList.remove("over"); });
+  poiDrop.addEventListener("drop", function (e) {
+    e.preventDefault();
+    poiDrop.classList.remove("over");
+    if (e.dataTransfer.files.length) handleGpxFiles(e.dataTransfer.files);
+  });
+
+  $("poiClear").addEventListener("click", function () {
+    pois = [];
+    renderPoiCount();
+    renderProfileSoon();
+  });
+
+  $("poiDistSlider").addEventListener("input", function () {
+    $("poiDistVal").textContent = this.value + " m";
+    renderProfileSoon();
+  });
+  $("cutsSlider").addEventListener("input", function () {
+    $("cutsVal").textContent = this.value;
+    renderProfileSoon();
+  });
+  $("snapChk").addEventListener("change", renderProfileSoon);
+  $("transChk").addEventListener("change", renderProfileSoon);
+  $("profDpiSel").addEventListener("change", renderProfileSoon);
+  $("profTrackSel").addEventListener("change", renderProfileSoon);
+  ["profWCm", "profHCm", "ovrKm", "ovrDplus"].forEach(function (id) {
+    $(id).addEventListener("input", renderProfileSoon);
+  });
+
+  $("profDlAll").addEventListener("click", function () {
+    lastSections.forEach(function (so) {
+      downloadCanvas(so.canvas, so.pngName);
+    });
+  });
+  $("profDlAllSvg").addEventListener("click", function () {
+    lastSections.forEach(function (so) {
+      downloadSvg(buildStripSvg(so.opts, so.spec.wcm, so.spec.hcm), so.svgName);
+    });
+  });
 
   $("tokenBtn").addEventListener("click", function () {
     var v = $("tokenInput").value.trim();
