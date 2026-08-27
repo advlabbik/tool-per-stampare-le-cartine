@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tool per stampare le cartine e le mappe degli eventi</title>
+<link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+<style>
+  :root {
+    --ink: #1c2530;
+    --panel: #232d3a;
+    --panel-2: #2c3847;
+    --text: #e8edf2;
+    --muted: #9fb0c0;
+    --glacier: #6fc3df;
+    --line: rgba(255,255,255,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: var(--ink); color: var(--text);
+    height: 100vh; display: flex; overflow: hidden;
+  }
+  aside {
+    width: 330px; min-width: 330px;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    display: flex; flex-direction: column; overflow-y: auto;
+  }
+  .brand { padding: 22px 20px 16px; border-bottom: 1px solid var(--line); }
+  .brand h1 { font-size: 17px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+  .brand h1 span { color: var(--glacier); }
+  .brand p { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  .section { padding: 16px 20px; border-bottom: 1px solid var(--line); }
+  .section h2 {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 10px;
+  }
+  label { font-size: 12px; color: var(--muted); display: block; margin: 10px 0 4px; }
+  select {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 6px; color: var(--text); padding: 9px 10px; font-size: 13px;
+  }
+  select:focus { outline: 1px solid var(--glacier); }
+  .row { display: flex; gap: 8px; }
+  .row > div { flex: 1; }
+
+  input[type="range"] { width: 100%; accent-color: var(--glacier); margin-top: 4px; cursor: pointer; }
+  input[type="checkbox"] { accent-color: var(--glacier); width: 16px; height: 16px; cursor: pointer; }
+  .slider-head { display: flex; justify-content: space-between; align-items: baseline; margin-top: 10px; }
+  .slider-head label { margin: 0; }
+  .slider-val { font-size: 11px; color: var(--glacier); font-variant-numeric: tabular-nums; }
+
+  button {
+    width: 100%; border: none; border-radius: 6px; padding: 11px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .btn-primary { background: var(--glacier); color: #0d1620; }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .gpx-drop {
+    border: 1.5px dashed rgba(255,255,255,0.2); border-radius: 6px;
+    padding: 14px; text-align: center; font-size: 12px; color: var(--muted);
+    cursor: pointer; transition: border-color 0.15s;
+  }
+  .gpx-drop:hover, .gpx-drop.over { border-color: var(--glacier); color: var(--text); }
+
+  .track-item {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 6px; padding: 7px 9px; margin-top: 8px;
+  }
+  .track-item .t-name {
+    flex: 1; font-size: 12px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .track-item select { width: 118px; padding: 5px 6px; font-size: 12px; flex: none; }
+  .track-item .t-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; border: 1px solid rgba(255,255,255,0.4); }
+  .track-item .t-x {
+    width: auto; background: none; border: none; color: var(--muted);
+    font-size: 15px; padding: 0 3px; cursor: pointer; flex: none;
+  }
+  .track-item .t-x:hover { color: #f0967a; }
+  .track-order-hint { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.4; }
+
+  .hint { font-size: 11px; color: var(--muted); line-height: 1.45; margin-top: 8px; }
+  .status {
+    font-size: 12px; padding: 8px 10px; border-radius: 6px;
+    margin-top: 10px; display: none; line-height: 1.4;
+  }
+  .status.show { display: block; }
+  .status.info { background: rgba(111,195,223,0.12); color: var(--glacier); }
+  .status.err  { background: rgba(231,111,81,0.14); color: #f0967a; }
+
+  .coords {
+    font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums;
+    padding: 10px 20px; margin-top: auto;
+  }
+
+  main { flex: 1; position: relative; }
+  #map { position: absolute; inset: 0; }
+
+  #worn {
+    position: absolute; inset: 0; pointer-events: none;
+    mix-blend-mode: multiply;
+    background:
+      radial-gradient(ellipse at center, rgba(255,252,244,0) 52%, rgba(86,66,38,0.20) 100%),
+      linear-gradient(rgba(222,207,172,0.35), rgba(222,207,172,0.35)),
+      url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
+    opacity: 0.25;
+  }
+
+  #frame {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    border: 1.5px solid rgba(255,255,255,0.85);
+    box-shadow: 0 0 0 9999px rgba(13,22,32,0.45);
+    pointer-events: none; display: none;
+  }
+  #frame .tag {
+    position: absolute; top: -26px; left: 0;
+    background: rgba(13,22,32,0.85); color: #fff;
+    font-size: 11px; letter-spacing: 0.08em;
+    padding: 4px 9px; border-radius: 4px; white-space: nowrap;
+  }
+
+  #gate {
+    position: absolute; inset: 0; background: rgba(13,22,32,0.92);
+    display: flex; align-items: center; justify-content: center;
+    text-align: center; z-index: 10;
+  }
+  #gate .inner { max-width: 380px; padding: 24px; }
+  #gate h3 { font-size: 16px; margin-bottom: 8px; }
+  #gate p { font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+  #exportOverlay {
+    position: absolute; inset: 0; background: rgba(13,22,32,0.88);
+    display: none; align-items: center; justify-content: center;
+    z-index: 20; flex-direction: column; gap: 14px;
+  }
+  #exportOverlay.show { display: flex; }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid rgba(255,255,255,0.15);
+    border-top-color: var(--glacier);
+    border-radius: 50%; animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #exportOverlay p { font-size: 13px; color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.5s; } }
+</style>
+</head>
+<body>
+
+<aside>
+  <div class="brand">
+    <h1>Tool per stampare le cartine e le mappe degli eventi</h1>
+    <p>Realizza l'esportazione con le tracce .gpx dell'evento</p>
+  </div>
+
+  <div class="section">
+    <h2>Stile della mappa</h2>
+    <select id="styleSel">
+      <option value="mapbox://styles/mapbox/outdoors-v12" selected>Outdoors · toponimi, rilievo, parchi (consigliato)</option>
+      <option value="mapbox://styles/mapbox/satellite-streets-v12">Satellite con nomi</option>
+      <option value="mapbox://styles/mapbox/streets-v12">Streets</option>
+      <option value="mapbox://styles/mapbox/light-v11">Light · minimale</option>
+    </select>
+    <p class="hint">Inquadra a piacere: quello che vedi dentro la cornice bianca è quello che verrà stampato.</p>
+  </div>
+
+  <div class="section">
+    <h2>Carattere della mappa</h2>
+
+    <div class="slider-head">
+      <label for="reliefSlider">Ombreggiatura del rilievo</label>
+      <span class="slider-val" id="reliefVal">80</span>
+    </div>
+    <input type="range" id="reliefSlider" min="0" max="100" value="80">
+
+    <div class="slider-head">
+      <label for="wornSlider">Effetto vissuto</label>
+      <span class="slider-val" id="wornVal">0</span>
+    </div>
+    <input type="range" id="wornSlider" min="0" max="100" value="0">
+
+    <div class="slider-head">
+      <label for="pitchSlider">Inclinazione (volo d'uccello)</label>
+      <span class="slider-val" id="pitchVal">0°</span>
+    </div>
+    <input type="range" id="pitchSlider" min="0" max="60" value="0">
+
+    <div class="slider-head" style="margin-top:12px">
+      <label for="terrainChk">Terreno 3D (profondità reale con l'inclinazione)</label>
+      <input type="checkbox" id="terrainChk">
+    </div>
+
+    <div class="slider-head" style="margin-top:12px">
+      <label for="vintageChk">Tonalità atlante d'epoca</label>
+      <input type="checkbox" id="vintageChk">
+    </div>
+
+    <div class="slider-head" style="margin-top:12px">
+      <label for="offroadChk">Rete off-road (sterrate e sentieri)</label>
+      <input type="checkbox" id="offroadChk" checked>
+    </div>
+
+    <p class="hint">Sterrate in tratteggio marrone, sentieri e mulattiere in punteggiato rosso. Nota: i dati dei sentieri arrivano nelle tile solo avvicinando lo zoom (circa da livello 11-12 in su); su inquadrature ampie usa il "Dettaglio off-road nell'export" per tirarli dentro nella stampa.</p>
+  </div>
+
+  <div class="section">
+    <h2>Formato di stampa</h2>
+    <div class="row">
+      <div>
+        <label for="sizeSel">Dimensione</label>
+        <select id="sizeSel">
+          <option value="30x40">30 × 40 cm</option>
+          <option value="50x70">50 × 70 cm</option>
+          <option value="42x59.4">A2 (42 × 59,4 cm)</option>
+          <option value="59.4x84.1" selected>A1 (59,4 × 84,1 cm)</option>
+        </select>
+      </div>
+      <div>
+        <label for="orientSel">Orientamento</label>
+        <select id="orientSel">
+          <option value="portrait">Verticale</option>
+          <option value="landscape" selected>Orizzontale</option>
+        </select>
+      </div>
+    </div>
+    <label for="dpiSel">Risoluzione</label>
+    <select id="dpiSel">
+      <option value="150">150 DPI · buona</option>
+      <option value="200" selected>200 DPI · ottima</option>
+      <option value="300">300 DPI · tipografia</option>
+    </select>
+    <label for="boostSel">Dettaglio off-road nell'export</label>
+    <select id="boostSel">
+      <option value="1" selected>Normale</option>
+      <option value="1.5">Alto · più sentieri, scritte ridotte di un terzo</option>
+      <option value="2">Massimo · rete completa, scritte dimezzate</option>
+    </select>
+    <p class="hint" id="pxHint"></p>
+  </div>
+
+  <div class="section">
+    <h2>Tracce dei percorsi</h2>
+    <div class="gpx-drop" id="gpxDrop">Trascina qui uno o più GPX<br>oppure clicca per sceglierli</div>
+    <input type="file" id="gpxFile" accept=".gpx" multiple style="display:none">
+    <div id="trackList"></div>
+    <p class="track-order-hint" id="orderHint" style="display:none">La prima traccia caricata sta sopra a tutte le altre sulla mappa.</p>
+
+    <div class="slider-head" style="margin-top:12px">
+      <label for="widthSlider">Spessore tracce</label>
+      <span class="slider-val" id="widthVal">3</span>
+    </div>
+    <input type="range" id="widthSlider" min="1" max="8" step="0.5" value="3">
+
+    <div class="slider-head" style="margin-top:12px">
+      <label for="arrowsChk">Frecce di direzione</label>
+      <input type="checkbox" id="arrowsChk" checked>
+    </div>
+  </div>
+
+  <div class="section">
+    <button class="btn-primary" id="exportBtn" disabled>Esporta PNG per la stampa</button>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="coords" id="coords"></div>
+</aside>
+
+<main>
+  <div id="map"></div>
+  <div id="worn"></div>
+  <div id="frame"><span class="tag" id="frameTag"></span></div>
+  <div id="gate">
+    <div class="inner">
+      <h3 id="gateTitle">Caricamento della mappa…</h3>
+      <p id="gateMsg">Un attimo, sto contattando i server di Mapbox.</p>
+      <div id="tokenForm" style="display:none; margin-top:16px; text-align:left;">
+        <input id="tokenInput" type="text" placeholder="pk.…" autocomplete="off" spellcheck="false"
+               style="width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:6px; color:var(--text); padding:9px 10px; font-size:13px;">
+        <button class="btn-primary" id="tokenBtn" style="margin-top:10px;">Avvia la mappa</button>
+        <p class="hint">Il token si crea gratis su account.mapbox.com nella sezione Tokens e resta salvato solo in questo browser. Consigliata la restrizione URL al dominio di questa pagina.</p>
+      </div>
+    </div>
+  </div>
+  <div id="exportOverlay">
+    <div class="spinner"></div>
+    <p id="exportMsg">Rendering ad alta risoluzione in corso…</p>
+  </div>
+</main>
+
+<script>
+(function () {
+  // Token pubblico Mapbox (pk.…). Nel repository resta vuoto: la pagina lo
+  // chiede al primo avvio e lo conserva nel browser. Chi fa un fork può
+  // scriverlo qui, impostando le restrizioni URL su account.mapbox.com.
+  var TOKEN = "";
+
+  var map = null;
+
+  // Tracce caricate. La prima dell'elenco sta sopra a tutte sulla mappa.
+  var tracks = [];
+  var trackSeq = 0;
+
+  // Palette: colori accesi che risaltano, più qualche classico
+  var PALETTE = [
+    ["Fucsia acceso", "#ff2d78"],
+    ["Arancio acceso", "#ff8a00"],
+    ["Giallo fluo", "#ffd60a"],
+    ["Verde acceso", "#22d94a"],
+    ["Ciano", "#00e0ff"],
+    ["Blu elettrico", "#2f6bff"],
+    ["Viola acceso", "#b34dff"],
+    ["Rosso", "#e63946"],
+    ["Salmone", "#e76f51"],
+    ["Bianco", "#ffffff"],
+    ["Nero inchiostro", "#1c1c1c"]
+  ];
+
+  var $ = function (id) { return document.getElementById(id); };
+  var statusEl = $("status");
+
+  function setStatus(msg, type) {
+    statusEl.textContent = msg;
+    statusEl.className = "status show " + (type || "info");
+  }
+  function clearStatus() { statusEl.className = "status"; }
+
+  function reliefLevel() { return parseInt($("reliefSlider").value, 10) / 100; }
+  function wornLevel()   { return parseInt($("wornSlider").value, 10) / 100; }
+  function trackWidth()  { return parseFloat($("widthSlider").value) || 3; }
+  function arrowSize()   { return Math.round(9 + trackWidth() * 1.8); }
+
+  /* ================= CARATTERE DELLA MAPPA ================= */
+
+  function firstSymbolId(m) {
+    var layers = m.getStyle().layers;
+    for (var i = 0; i < layers.length; i++) {
+      if (layers[i].type === "symbol") return layers[i].id;
+    }
+    return null;
+  }
+
+  // Punto di inserimento sopra tutte le linee (strade e ponti) e sotto le etichette
+  function aboveLinesAnchor(m) {
+    var lyrs = m.getStyle().layers;
+    var lastDrawIdx = -1;
+    for (var i = 0; i < lyrs.length; i++) {
+      if ((lyrs[i].type === "line" || lyrs[i].type === "fill") &&
+          lyrs[i].id.indexOf("gpx") !== 0 && lyrs[i].id.indexOf("offroad") !== 0) {
+        lastDrawIdx = i;
+      }
+    }
+    for (var j = lastDrawIdx + 1; j < lyrs.length; j++) {
+      if (lyrs[j].type === "symbol") return lyrs[j].id;
+    }
+    return null;
+  }
+
+  function applyRelief(m) {
+    var lvl = reliefLevel();
+    if (!m.getSource("dem")) {
+      m.addSource("dem", {
+        type: "raster-dem",
+        url: "mapbox://mapbox.mapbox-terrain-dem-v1",
+        tileSize: 512,
+        maxzoom: 14
+      });
+    }
+    var anchor = firstSymbolId(m);
+    if (!m.getLayer("rilievo-forte")) {
+      m.addLayer({
+        id: "rilievo-forte", type: "hillshade", source: "dem",
+        paint: {
+          "hillshade-exaggeration": 0.5,
+          "hillshade-shadow-color": "#3b3a30",
+          "hillshade-highlight-color": "#ffffff",
+          "hillshade-accent-color": "#57533f",
+          "hillshade-illumination-direction": 335
+        }
+      }, anchor);
+    }
+    if (!m.getLayer("rilievo-accento")) {
+      m.addLayer({
+        id: "rilievo-accento", type: "hillshade", source: "dem",
+        paint: {
+          "hillshade-exaggeration": 0.4,
+          "hillshade-shadow-color": "#262620",
+          "hillshade-highlight-color": "#ffffff",
+          "hillshade-accent-color": "#3c382c",
+          "hillshade-illumination-direction": 250
+        }
+      }, anchor);
+    }
+    var vint = $("vintageChk").checked;
+    m.setPaintProperty("rilievo-forte", "hillshade-exaggeration", Math.min(1, lvl));
+    m.setPaintProperty("rilievo-accento", "hillshade-exaggeration", Math.min(1, lvl * 0.65));
+    m.setPaintProperty("rilievo-forte", "hillshade-shadow-color", vint ? "#5f3526" : "#3b3a30");
+    m.setPaintProperty("rilievo-forte", "hillshade-accent-color", vint ? "#7c4a33" : "#57533f");
+    m.setPaintProperty("rilievo-forte", "hillshade-highlight-color", vint ? "#fff6e6" : "#ffffff");
+    m.setPaintProperty("rilievo-accento", "hillshade-shadow-color", vint ? "#46281c" : "#262620");
+    m.setPaintProperty("rilievo-accento", "hillshade-accent-color", vint ? "#6b3f2c" : "#3c382c");
+    m.setLayoutProperty("rilievo-forte", "visibility", lvl === 0 ? "none" : "visible");
+    m.setLayoutProperty("rilievo-accento", "visibility", lvl === 0 ? "none" : "visible");
+  }
+
+  // Terreno 3D: profondità reale quando si inclina la mappa
+  function applyTerrain(m) {
+    try {
+      if ($("terrainChk").checked) {
+        m.setTerrain({ source: "dem", exaggeration: 1.4 });
+      } else {
+        m.setTerrain(null);
+      }
+    } catch (e) {}
+  }
+
+  var EXTRA_PLACES = [
+    ["Trento", 11.12, 46.07, 1],
+    ["Rovereto", 11.04, 45.89, 2], ["Riva del Garda", 10.84, 45.885, 2],
+    ["Arco", 10.885, 45.92, 3], ["Torbole", 10.875, 45.87, 3],
+    ["Pergine Valsugana", 11.24, 46.06, 3], ["Levico Terme", 11.30, 46.01, 3],
+    ["Borgo Valsugana", 11.455, 46.05, 3], ["Caldonazzo", 11.26, 45.99, 3],
+    ["Folgaria", 11.17, 45.92, 3], ["Lavarone", 11.27, 45.94, 3],
+    ["Ala", 11.00, 45.76, 3], ["Avio", 10.94, 45.73, 3],
+    ["Mezzolombardo", 11.09, 46.21, 3], ["Cles", 11.03, 46.36, 3],
+    ["Malè", 10.91, 46.35, 3], ["Dimaro", 10.87, 46.33, 3],
+    ["Peio", 10.67, 46.36, 3], ["Vermiglio", 10.69, 46.30, 3],
+    ["Passo del Tonale", 10.58, 46.26, 3],
+    ["Madonna di Campiglio", 10.83, 46.23, 3], ["Pinzolo", 10.77, 46.16, 3],
+    ["Tione di Trento", 10.73, 46.03, 3], ["Storo", 10.58, 45.85, 3],
+    ["Andalo", 11.00, 46.17, 3], ["Molveno", 10.96, 46.14, 3],
+    ["Cavalese", 11.46, 46.29, 3], ["Predazzo", 11.60, 46.31, 3],
+    ["Moena", 11.66, 46.38, 3], ["Canazei", 11.77, 46.48, 3],
+    ["San Martino di Castrozza", 11.80, 46.26, 3], ["Fiera di Primiero", 11.83, 46.18, 3]
+  ];
+  var EXTRA_NAMES = EXTRA_PLACES.map(function (p) { return p[0]; });
+
+  function applyLabelBoost(m) {
+    var layers = m.getStyle().layers;
+    layers.forEach(function (l) {
+      if (l.type !== "symbol") return;
+      try {
+        if (l.id.indexOf("settlement-subdivision") === 0) {
+          m.setLayoutProperty(l.id, "visibility", "none");
+        } else if (l.id.indexOf("settlement") === 0) {
+          m.setFilter(l.id, ["!", ["in", ["get", "name"], ["literal", EXTRA_NAMES]]]);
+          m.setLayerZoomRange(l.id, 0, 24);
+          m.setLayoutProperty(l.id, "text-padding", 0);
+        } else {
+          var mz = (typeof l.minzoom === "number") ? l.minzoom : 0;
+          if (mz > 0) m.setLayerZoomRange(l.id, Math.max(0, mz - 4), (typeof l.maxzoom === "number") ? l.maxzoom : 24);
+          if (l.id.indexOf("natural") === 0 || l.id.indexOf("water") === 0) {
+            m.setLayoutProperty(l.id, "text-padding", 0);
+          }
+        }
+      } catch (e) {}
+    });
+  }
+
+  function applyExtraLabels(m) {
+    if (!m.getSource("extra-places")) {
+      m.addSource("extra-places", {
+        type: "geojson",
+        data: {
+          type: "FeatureCollection",
+          features: EXTRA_PLACES.map(function (p) {
+            return {
+              type: "Feature",
+              geometry: { type: "Point", coordinates: [p[1], p[2]] },
+              properties: { name: p[0], rank: p[3] || 3 }
+            };
+          })
+        }
+      });
+    }
+    if (!m.getSource("region-names")) {
+      m.addSource("region-names", {
+        type: "geojson",
+        data: {
+          type: "FeatureCollection",
+          features: [{
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [11.70, 46.42] },
+            properties: { name: "Dolomiti" }
+          }]
+        }
+      });
+    }
+    if (!m.getLayer("extra-places-dot")) {
+      m.addLayer({
+        id: "extra-places-dot", type: "circle", source: "extra-places",
+        paint: {
+          "circle-radius": ["match", ["get", "rank"], 1, 3.4, 2, 2.7, 2.1],
+          "circle-color": ["match", ["get", "rank"], 1, "#1f1f1f", 2, "#333333", "#4d4d4d"],
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 0.9
+        }
+      });
+    }
+    if (!m.getLayer("extra-places-label")) {
+      m.addLayer({
+        id: "extra-places-label", type: "symbol", source: "extra-places",
+        layout: {
+          "text-field": ["get", "name"],
+          "text-font": ["DIN Pro Regular", "Arial Unicode MS Regular"],
+          "text-size": ["match", ["get", "rank"], 1, 14.5, 2, 12, 10.5],
+          "text-offset": [0, 0.7],
+          "text-anchor": "top",
+          "text-padding": 0
+        },
+        paint: {
+          "text-color": ["match", ["get", "rank"], 1, "#1a1a1a", 2, "#333333", "#4d4d4d"],
+          "text-halo-color": "rgba(255,253,246,0.9)",
+          "text-halo-width": 1.2
+        }
+      });
+    }
+    if (!m.getLayer("region-names-label")) {
+      m.addLayer({
+        id: "region-names-label", type: "symbol", source: "region-names",
+        layout: {
+          "text-field": ["get", "name"],
+          "text-font": ["DIN Pro Italic", "Arial Unicode MS Regular"],
+          "text-size": 17,
+          "text-letter-spacing": 0.35,
+          "text-transform": "uppercase",
+          "text-padding": 2
+        },
+        paint: {
+          "text-color": "#7a6753",
+          "text-halo-color": "rgba(255,250,238,0.85)",
+          "text-halo-width": 1.4
+        }
+      });
+    }
+    keepLabelsOnTop(m);
+  }
+
+  function keepLabelsOnTop(m) {
+    ["region-names-label", "extra-places-dot", "extra-places-label"].forEach(function (id) {
+      try { if (m.getLayer(id)) m.moveLayer(id); } catch (e) {}
+    });
+  }
+
+  function applyOffroad(m) {
+    var anchor = aboveLinesAnchor(m);
+    if (!m.getLayer("offroad-track")) {
+      m.addLayer({
+        id: "offroad-track", type: "line", source: "composite", "source-layer": "road",
+        filter: ["==", ["get", "class"], "track"],
+        paint: {
+          "line-color": "#7a4f23",
+          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 0.7, 11, 1.3, 14, 2.2],
+          "line-dasharray": [2.4, 1.4]
+        },
+        layout: { "line-join": "round" }
+      }, anchor);
+    }
+    if (!m.getLayer("offroad-path")) {
+      m.addLayer({
+        id: "offroad-path", type: "line", source: "composite", "source-layer": "road",
+        filter: ["==", ["get", "class"], "path"],
+        paint: {
+          "line-color": "#b03a2e",
+          "line-width": ["interpolate", ["linear"], ["zoom"], 8, 0.5, 11, 1.0, 14, 1.8],
+          "line-dasharray": [0.8, 1.6]
+        },
+        layout: { "line-join": "round" }
+      }, anchor);
+    }
+    var vis = $("offroadChk").checked ? "visible" : "none";
+    m.setLayoutProperty("offroad-track", "visibility", vis);
+    m.setLayoutProperty("offroad-path", "visibility", vis);
+  }
+
+  function applyVintage(m) {
+    var tweaks = [
+      ["land", "background-color", "#ece4d2"],
+      ["water", "fill-color", "#c9d8de"],
+      ["waterway", "line-color", "#aac4cd"],
+      ["landcover", "fill-opacity", 0.3],
+      ["landuse", "fill-opacity", 0.3],
+      ["national-park", "fill-opacity", 0.18]
+    ];
+    tweaks.forEach(function (t) {
+      try { m.setPaintProperty(t[0], t[1], t[2]); } catch (e) {}
+    });
+  }
+
+  function applyCharacter(m) {
+    applyRelief(m);
+    applyTerrain(m);
+    applyLabelBoost(m);
+    applyExtraLabels(m);
+    applyOffroad(m);
+    if ($("vintageChk").checked) applyVintage(m);
+  }
+
+  // Ricarica completa dello stile: diff disattivato, altrimenti Mapbox
+  // non rigenera nulla e le personalizzazioni non vengono riapplicate
+  function refreshStyle() {
+    if (!map) return;
+    map.setStyle($("styleSel").value, { diff: false });
+  }
+
+  /* ================= Effetto vissuto ================= */
+  function applyWornPreview() { $("worn").style.opacity = wornLevel(); }
+
+  function makeNoiseTile(size) {
+    var c = document.createElement("canvas");
+    c.width = c.height = size;
+    var x = c.getContext("2d");
+    var d = x.createImageData(size, size);
+    for (var i = 0; i < d.data.length; i += 4) {
+      var v = 110 + Math.random() * 90;
+      d.data[i] = v; d.data[i + 1] = v; d.data[i + 2] = v; d.data[i + 3] = 255;
+    }
+    x.putImageData(d, 0, 0);
+    return c;
+  }
+
+  function applyWornToCanvas(srcCanvas) {
+    var k = wornLevel();
+    if (k === 0) return srcCanvas.toDataURL("image/png");
+    var out = document.createElement("canvas");
+    out.width = srcCanvas.width;
+    out.height = srcCanvas.height;
+    var ctx = out.getContext("2d");
+    ctx.drawImage(srcCanvas, 0, 0);
+
+    ctx.globalCompositeOperation = "multiply";
+    ctx.fillStyle = "rgba(226, 212, 178, " + (0.30 * k).toFixed(3) + ")";
+    ctx.fillRect(0, 0, out.width, out.height);
+
+    var cx = out.width / 2, cy = out.height / 2;
+    var rMax = Math.sqrt(cx * cx + cy * cy);
+    var grad = ctx.createRadialGradient(cx, cy, rMax * 0.5, cx, cy, rMax);
+    grad.addColorStop(0, "rgba(86,66,38,0)");
+    grad.addColorStop(1, "rgba(86,66,38," + (0.15 * k).toFixed(3) + ")");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, out.width, out.height);
+
+    ctx.globalCompositeOperation = "overlay";
+    ctx.globalAlpha = 0.10 * k;
+    ctx.fillStyle = ctx.createPattern(makeNoiseTile(512), "repeat");
+    ctx.fillRect(0, 0, out.width, out.height);
+
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+    return out.toDataURL("image/png");
+  }
+
+  /* ================= Dimensioni e cornice ================= */
+  function getPrintSpec() {
+    var parts = $("sizeSel").value.split("x");
+    var wCm = parseFloat(parts[0]);
+    var hCm = parseFloat(parts[1]);
+    if ($("orientSel").value === "landscape") {
+      var t = wCm; wCm = hCm; hCm = t;
+    }
+    var dpi = parseInt($("dpiSel").value, 10);
+    return {
+      wCm: wCm, hCm: hCm, dpi: dpi,
+      wPx: Math.round(wCm / 2.54 * dpi),
+      hPx: Math.round(hCm / 2.54 * dpi)
+    };
+  }
+
+  function maxCanvasSide() {
+    try {
+      var c = document.createElement("canvas");
+      var gl = c.getContext("webgl") || c.getContext("experimental-webgl");
+      if (gl) return gl.getParameter(gl.MAX_TEXTURE_SIZE) || 8192;
+    } catch (e) {}
+    return 8192;
+  }
+
+  function updatePxHint() {
+    var s = getPrintSpec();
+    var limit = maxCanvasSide();
+    var msg = "Output: " + s.wPx + " × " + s.hPx + " px (" + s.wCm + " × " + s.hCm + " cm a " + s.dpi + " DPI)";
+    if (Math.max(s.wPx, s.hPx) > limit) {
+      msg += " — supera il limite della tua scheda grafica (" + limit + " px). Scegli un DPI più basso o un formato più piccolo.";
+    }
+    $("pxHint").textContent = msg;
+    updateFrame();
+  }
+
+  function updateFrame() {
+    if (!map) return;
+    var s = getPrintSpec();
+    var mainEl = document.querySelector("main");
+    var availW = mainEl.clientWidth * 0.86;
+    var availH = mainEl.clientHeight * 0.86;
+    var ratio = s.wPx / s.hPx;
+    var fw = availW, fh = availW / ratio;
+    if (fh > availH) { fh = availH; fw = availH * ratio; }
+    var frame = $("frame");
+    frame.style.width = fw + "px";
+    frame.style.height = fh + "px";
+    frame.style.display = "block";
+    $("frameTag").textContent = s.wCm + " × " + s.hCm + " cm · " + s.dpi + " DPI";
+  }
+
+  /* ================= Mappa ================= */
+  function savedToken() {
+    try { return localStorage.getItem("mapboxToken") || ""; } catch (e) { return ""; }
+  }
+
+  function showTokenGate(msg) {
+    $("gate").style.display = "flex";
+    $("gateTitle").textContent = "Serve il token Mapbox";
+    $("gateMsg").textContent = msg || "Per disegnare la mappa serve un token pubblico Mapbox (inizia con pk.). Incollalo qui sotto e verrà ricordato su questo browser.";
+    $("tokenForm").style.display = "block";
+    $("tokenInput").focus();
+  }
+
+  function loadMap() {
+    if (typeof mapboxgl === "undefined") {
+      $("gateMsg").textContent = "La libreria Mapbox non si è caricata. Controlla la connessione a internet e ricarica la pagina (F5).";
+      return;
+    }
+    var token = TOKEN || savedToken();
+    if (!token) { showTokenGate(); return; }
+    startMap(token);
+  }
+
+  function startMap(token) {
+    mapboxgl.accessToken = token;
+    $("tokenForm").style.display = "none";
+    $("gateTitle").textContent = "Caricamento della mappa…";
+    $("gateMsg").textContent = "Un attimo, sto contattando i server di Mapbox.";
+    $("gate").style.display = "flex";
+
+    map = new mapboxgl.Map({
+      container: "map",
+      style: $("styleSel").value,
+      bounds: [[10.35, 45.62], [12.05, 46.58]],
+      fitBoundsOptions: { padding: 40 },
+      preserveDrawingBuffer: true
+    });
+
+    map.addControl(new mapboxgl.NavigationControl(), "top-right");
+    map.addControl(new mapboxgl.ScaleControl({ maxWidth: 140, unit: "metric" }), "bottom-right");
+
+    map.on("load", function () {
+      $("gate").style.display = "none";
+      $("exportBtn").disabled = false;
+      updateFrame();
+      applyCharacter(map);
+      applyWornPreview();
+      rebuildTracks(map);
+    });
+
+    map.on("style.load", function () {
+      setTimeout(function () {
+        try { applyCharacter(map); } catch (e) {}
+        try { rebuildTracks(map); } catch (e) {}
+      }, 0);
+    });
+
+    map.on("error", function (e) {
+      var msg = (e && e.error && e.error.message) || "";
+      if (msg.toLowerCase().indexOf("unauthorized") !== -1 || msg.indexOf("401") !== -1 || msg.indexOf("403") !== -1) {
+        try { localStorage.removeItem("mapboxToken"); } catch (err) {}
+        showTokenGate("Il token è stato rifiutato da Mapbox (accesso negato). Controllalo su account.mapbox.com e incollalo di nuovo.");
+      }
+    });
+
+    map.on("move", function () {
+      var c = map.getCenter();
+      $("coords").textContent =
+        "Centro " + c.lat.toFixed(3) + "°, " + c.lng.toFixed(3) + "° · Zoom " + map.getZoom().toFixed(2) +
+        " · Inclinazione " + Math.round(map.getPitch()) + "°";
+    });
+
+    map.on("pitchend", function () {
+      var p = Math.round(map.getPitch());
+      $("pitchSlider").value = p;
+      $("pitchVal").textContent = p + "°";
+    });
+  }
+
+  /* ================= Tracce GPX multiple ================= */
+  function parseGpx(text) {
+    var doc = new DOMParser().parseFromString(text, "application/xml");
+    if (doc.querySelector("parsererror")) return null;
+    var pts = doc.getElementsByTagName("trkpt");
+    if (!pts.length) pts = doc.getElementsByTagName("rtept");
+    if (!pts.length) return null;
+    var coords = [];
+    for (var i = 0; i < pts.length; i++) {
+      var lat = parseFloat(pts[i].getAttribute("lat"));
+      var lon = parseFloat(pts[i].getAttribute("lon"));
+      if (!isNaN(lat) && !isNaN(lon)) coords.push([lon, lat]);
+    }
+    if (coords.length < 2) return null;
+    return { type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} };
+  }
+
+  function isLightColor(hex) {
+    var r = parseInt(hex.substr(1, 2), 16);
+    var g = parseInt(hex.substr(3, 2), 16);
+    var b = parseInt(hex.substr(5, 2), 16);
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.72;
+  }
+
+  function removeTrackLayers(m) {
+    tracks.forEach(function (t) {
+      ["gpx-arrows-" + t.id, "gpx-line-" + t.id, "gpx-casing-" + t.id].forEach(function (id) {
+        try { if (m.getLayer(id)) m.removeLayer(id); } catch (e) {}
+      });
+      try { if (m.getSource("gpx-" + t.id)) m.removeSource("gpx-" + t.id); } catch (e) {}
+    });
+  }
+
+  // Ridisegna tutte le tracce. Ordine: l'ultima dell'elenco viene aggiunta per
+  // prima (sotto), la prima per ultima (sopra). Tutte sotto le etichette.
+  function rebuildTracks(m) {
+    if (!m || !m.isStyleLoaded || !m.getStyle()) return;
+    removeTrackLayers(m);
+    var anchor = aboveLinesAnchor(m);
+    var w = trackWidth();
+    for (var i = tracks.length - 1; i >= 0; i--) {
+      var t = tracks[i];
+      var contrast = isLightColor(t.color) ? "#2b2b2b" : "#ffffff";
+      m.addSource("gpx-" + t.id, { type: "geojson", data: t.geojson });
+      m.addLayer({
+        id: "gpx-casing-" + t.id, type: "line", source: "gpx-" + t.id,
+        paint: {
+          "line-color": contrast,
+          "line-width": w + 2.4,
+          "line-opacity": 0.85
+        },
+        layout: { "line-cap": "round", "line-join": "round" }
+      }, anchor);
+      m.addLayer({
+        id: "gpx-line-" + t.id, type: "line", source: "gpx-" + t.id,
+        paint: { "line-color": t.color, "line-width": w },
+        layout: { "line-cap": "round", "line-join": "round" }
+      }, anchor);
+      // Frecce che seguono il verso di percorrenza del GPX
+      m.addLayer({
+        id: "gpx-arrows-" + t.id, type: "symbol", source: "gpx-" + t.id,
+        layout: {
+          "symbol-placement": "line",
+          "symbol-spacing": 90,
+          "text-field": ">",
+          "text-font": ["DIN Pro Bold", "Arial Unicode MS Bold"],
+          "text-size": arrowSize(),
+          "text-keep-upright": false,
+          "text-rotation-alignment": "map",
+          "text-allow-overlap": true,
+          "text-ignore-placement": true,
+          "visibility": $("arrowsChk").checked ? "visible" : "none"
+        },
+        paint: {
+          "text-color": contrast,
+          "text-halo-color": t.color,
+          "text-halo-width": 1.1
+        }
+      }, anchor);
+    }
+    keepLabelsOnTop(m);
+  }
+
+  function renderTrackList() {
+    var list = $("trackList");
+    list.innerHTML = "";
+    tracks.forEach(function (t) {
+      var item = document.createElement("div");
+      item.className = "track-item";
+
+      var dot = document.createElement("span");
+      dot.className = "t-dot";
+      dot.style.background = t.color;
+
+      var name = document.createElement("span");
+      name.className = "t-name";
+      name.textContent = t.name;
+      name.title = t.name;
+
+      var sel = document.createElement("select");
+      PALETTE.forEach(function (p) {
+        var o = document.createElement("option");
+        o.value = p[1];
+        o.textContent = p[0];
+        if (p[1] === t.color) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.addEventListener("change", function () {
+        t.color = this.value;
+        dot.style.background = t.color;
+        if (map && map.isStyleLoaded()) {
+          try {
+            var contrast = isLightColor(t.color) ? "#2b2b2b" : "#ffffff";
+            map.setPaintProperty("gpx-line-" + t.id, "line-color", t.color);
+            map.setPaintProperty("gpx-casing-" + t.id, "line-color", contrast);
+            map.setPaintProperty("gpx-arrows-" + t.id, "text-color", contrast);
+            map.setPaintProperty("gpx-arrows-" + t.id, "text-halo-color", t.color);
+          } catch (e) { rebuildTracks(map); }
+        }
+      });
+
+      var x = document.createElement("button");
+      x.className = "t-x";
+      x.textContent = "×";
+      x.title = "Rimuovi traccia";
+      x.addEventListener("click", function () {
+        if (map) {
+          ["gpx-arrows-" + t.id, "gpx-line-" + t.id, "gpx-casing-" + t.id].forEach(function (id) {
+            try { if (map.getLayer(id)) map.removeLayer(id); } catch (e) {}
+          });
+          try { if (map.getSource("gpx-" + t.id)) map.removeSource("gpx-" + t.id); } catch (e) {}
+        }
+        tracks = tracks.filter(function (q) { return q.id !== t.id; });
+        renderTrackList();
+        if (map) rebuildTracks(map);
+      });
+
+      item.appendChild(dot);
+      item.appendChild(name);
+      item.appendChild(sel);
+      item.appendChild(x);
+      list.appendChild(item);
+    });
+    $("orderHint").style.display = tracks.length > 1 ? "block" : "none";
+  }
+
+  function handleGpxFiles(fileList) {
+    var files = Array.prototype.slice.call(fileList);
+    var pending = files.length;
+    var added = 0;
+    files.forEach(function (file) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        var feature = parseGpx(reader.result);
+        pending--;
+        if (feature) {
+          tracks.push({
+            id: ++trackSeq,
+            name: file.name.replace(/\.gpx$/i, ""),
+            color: PALETTE[(tracks.length) % (PALETTE.length - 2)][1],
+            geojson: feature
+          });
+          added++;
+        }
+        if (pending === 0) {
+          if (!added) {
+            setStatus("Nessuna traccia leggibile nei file caricati.", "err");
+            return;
+          }
+          clearStatus();
+          renderTrackList();
+          if (map && map.isStyleLoaded()) {
+            rebuildTracks(map);
+            var b = new mapboxgl.LngLatBounds();
+            tracks.forEach(function (t) {
+              t.geojson.geometry.coordinates.forEach(function (c) { b.extend(c); });
+            });
+            map.fitBounds(b, { padding: 60 });
+          }
+        }
+      };
+      reader.readAsText(file);
+    });
+  }
+
+  /* ================= Export ad alta risoluzione ================= */
+  function exportPng() {
+    if (!map) return;
+    var s = getPrintSpec();
+    var limit = maxCanvasSide();
+    if (Math.max(s.wPx, s.hPx) > limit) {
+      setStatus("Formato troppo grande per la tua scheda grafica (limite " + limit + " px per lato). Riduci DPI o dimensione.", "err");
+      return;
+    }
+    clearStatus();
+
+    var frameRect = $("frame").getBoundingClientRect();
+    var mapRect = map.getContainer().getBoundingClientRect();
+    var pitched = map.getPitch() > 0.5;
+
+    var boost = parseFloat($("boostSel").value) || 1;
+    var targetDpr = (s.dpi / 96) / boost;
+
+    var camera;
+    if (pitched) {
+      // Con la mappa inclinata la cornice non si può proiettare esattamente:
+      // si riproducono centro, zoom, rotazione e inclinazione della vista
+      camera = {
+        center: map.getCenter(),
+        zoom: map.getZoom() + Math.log2((s.wPx / targetDpr) / frameRect.width),
+        bearing: map.getBearing(),
+        pitch: map.getPitch()
+      };
+    } else {
+      var nw = map.unproject([frameRect.left - mapRect.left, frameRect.top - mapRect.top]);
+      var se = map.unproject([frameRect.right - mapRect.left, frameRect.bottom - mapRect.top]);
+      camera = {
+        bounds: new mapboxgl.LngLatBounds([nw.lng, se.lat], [se.lng, nw.lat]),
+        fitBoundsOptions: { padding: 0 },
+        bearing: 0,
+        pitch: 0
+      };
+    }
+
+    $("exportOverlay").className = "show";
+    $("exportOverlay").style.display = "flex";
+    $("exportMsg").textContent = "Rendering " + s.wPx + " × " + s.hPx + " px in corso… può richiedere fino a un minuto.";
+
+    var originalDpr = Object.getOwnPropertyDescriptor(window, "devicePixelRatio");
+    Object.defineProperty(window, "devicePixelRatio", {
+      get: function () { return targetDpr; },
+      configurable: true
+    });
+
+    var hidden = document.createElement("div");
+    hidden.style.cssText =
+      "position:fixed;top:0;left:0;visibility:hidden;pointer-events:none;" +
+      "width:" + (s.wPx / targetDpr) + "px;height:" + (s.hPx / targetDpr) + "px;";
+    document.body.appendChild(hidden);
+
+    var opts = {
+      container: hidden,
+      style: $("styleSel").value,
+      interactive: false,
+      preserveDrawingBuffer: true,
+      fadeDuration: 0,
+      attributionControl: false
+    };
+    Object.keys(camera).forEach(function (k) { opts[k] = camera[k]; });
+
+    var renderMap = new mapboxgl.Map(opts);
+
+    function cleanup() {
+      try { renderMap.remove(); } catch (e) {}
+      if (hidden.parentNode) hidden.parentNode.removeChild(hidden);
+      if (originalDpr) Object.defineProperty(window, "devicePixelRatio", originalDpr);
+      else delete window.devicePixelRatio;
+      $("exportOverlay").className = "";
+      $("exportOverlay").style.display = "none";
+    }
+
+    var failTimer = setTimeout(function () {
+      cleanup();
+      setStatus("Il rendering è andato in timeout. Prova con un DPI più basso.", "err");
+    }, 120000);
+
+    renderMap.on("style.load", function () {
+      setTimeout(function () {
+        try { applyCharacter(renderMap); } catch (e) {}
+        try { rebuildTracks(renderMap); } catch (e) {}
+      }, 0);
+    });
+
+    renderMap.once("idle", function () {
+      try {
+        var dataUrl = applyWornToCanvas(renderMap.getCanvas());
+        var a = document.createElement("a");
+        a.href = dataUrl;
+        a.download = "trentino_gravel_" + s.wCm + "x" + s.hCm + "cm_" + s.dpi + "dpi.png";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        var extra = pitched ? " Vista inclinata: l'inquadratura riproduce la vista corrente, non la cornice esatta." : "";
+        setStatus("Esportato: " + s.wPx + " × " + s.hPx + " px." + extra + " Ricorda di citare © Mapbox © OpenStreetMap sulla stampa.", "info");
+      } catch (err) {
+        setStatus("Errore durante l'esportazione: " + err.message, "err");
+      } finally {
+        clearTimeout(failTimer);
+        cleanup();
+      }
+    });
+
+    renderMap.on("error", function (e) {
+      clearTimeout(failTimer);
+      cleanup();
+      setStatus("Errore Mapbox durante il rendering: " + ((e.error && e.error.message) || "sconosciuto"), "err");
+    });
+  }
+
+  /* ================= Eventi UI ================= */
+  $("styleSel").addEventListener("change", refreshStyle);
+  $("vintageChk").addEventListener("change", refreshStyle);
+  $("offroadChk").addEventListener("change", function () {
+    if (map && map.isStyleLoaded()) applyOffroad(map);
+  });
+  $("terrainChk").addEventListener("change", function () {
+    if (map) applyTerrain(map);
+  });
+
+  $("reliefSlider").addEventListener("input", function () {
+    $("reliefVal").textContent = this.value;
+    if (map && map.isStyleLoaded()) applyRelief(map);
+  });
+
+  $("wornSlider").addEventListener("input", function () {
+    $("wornVal").textContent = this.value;
+    applyWornPreview();
+  });
+
+  $("pitchSlider").addEventListener("input", function () {
+    $("pitchVal").textContent = this.value + "°";
+    if (map) map.setPitch(parseInt(this.value, 10));
+  });
+
+  $("widthSlider").addEventListener("input", function () {
+    $("widthVal").textContent = this.value;
+    if (!map || !map.isStyleLoaded()) return;
+    var w = trackWidth();
+    tracks.forEach(function (t) {
+      try {
+        map.setPaintProperty("gpx-line-" + t.id, "line-width", w);
+        map.setPaintProperty("gpx-casing-" + t.id, "line-width", w + 2.4);
+        map.setLayoutProperty("gpx-arrows-" + t.id, "text-size", arrowSize());
+      } catch (e) {}
+    });
+  });
+
+  $("arrowsChk").addEventListener("change", function () {
+    if (!map || !map.isStyleLoaded()) return;
+    var vis = this.checked ? "visible" : "none";
+    tracks.forEach(function (t) {
+      try { map.setLayoutProperty("gpx-arrows-" + t.id, "visibility", vis); } catch (e) {}
+    });
+  });
+
+  ["sizeSel", "orientSel", "dpiSel"].forEach(function (id) {
+    $(id).addEventListener("change", updatePxHint);
+  });
+  window.addEventListener("resize", updateFrame);
+
+  var drop = $("gpxDrop");
+  drop.addEventListener("click", function () { $("gpxFile").click(); });
+  $("gpxFile").addEventListener("change", function () {
+    if (this.files.length) handleGpxFiles(this.files);
+    this.value = "";
+  });
+  drop.addEventListener("dragover", function (e) { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", function () { drop.classList.remove("over"); });
+  drop.addEventListener("drop", function (e) {
+    e.preventDefault();
+    drop.classList.remove("over");
+    if (e.dataTransfer.files.length) handleGpxFiles(e.dataTransfer.files);
+  });
+
+  $("exportBtn").addEventListener("click", exportPng);
+
+  $("tokenBtn").addEventListener("click", function () {
+    var v = $("tokenInput").value.trim();
+    if (v.indexOf("pk.") !== 0) {
+      $("gateMsg").textContent = "Il token non sembra valido, deve iniziare con pk. — controlla di aver copiato quello pubblico.";
+      return;
+    }
+    try { localStorage.setItem("mapboxToken", v); } catch (e) {}
+    if (map) { try { map.remove(); } catch (e) {} map = null; }
+    startMap(v);
+  });
+  $("tokenInput").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") $("tokenBtn").click();
+  });
+
+  updatePxHint();
+  applyWornPreview();
+  loadMap();
+})();
+</script>
+</body>
+</html>
