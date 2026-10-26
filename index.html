@@ -301,6 +301,16 @@
     <div id="trackList"></div>
     <p class="track-order-hint" id="orderHint" style="display:none">La prima traccia caricata sta sopra a tutte le altre sulla mappa.</p>
 
+    <div id="stageBox" style="display:none; margin-top:10px">
+      <button id="mergeBtn" class="btn-primary" style="width:100%; display:none" title="Le tracce diventano una sola, in ordine di orario. I buchi fra una tappa e l'altra (traghetti) restano tratteggiati e non contano nei km.">Unisci in una traccia sola</button>
+      <p class="hint" id="mergeHint"></p>
+      <div class="slider-head sec-map" style="margin-top:12px">
+        <label for="stageNamesChk">Nomi di partenza e arrivo</label>
+        <input type="checkbox" id="stageNamesChk">
+      </div>
+      <p class="hint sec-map" id="stageNamesHint"></p>
+    </div>
+
     <div class="sec-map">
       <div class="slider-head" style="margin-top:12px">
         <label for="widthSlider">Spessore tracce</label>
@@ -576,7 +586,7 @@
         if (l.id.indexOf("settlement-subdivision") === 0) {
           m.setLayoutProperty(l.id, "visibility", "none");
         } else if (l.id.indexOf("settlement") === 0) {
-          m.setFilter(l.id, ["!", ["in", ["get", "name"], ["literal", EXTRA_NAMES]]]);
+          m.setFilter(l.id, ["!", ["in", ["get", "name"], ["literal", EXTRA_NAMES.concat(stagePlaces.map(function (q) { return q.name; }))]]]);
           m.setLayerZoomRange(l.id, 0, 24);
           m.setLayoutProperty(l.id, "text-padding", 0);
         } else {
@@ -670,7 +680,7 @@
   }
 
   function keepLabelsOnTop(m) {
-    ["region-names-label", "extra-places-dot", "extra-places-label"].forEach(function (id) {
+    ["region-names-label", "extra-places-dot", "extra-places-label", "stage-places-dot", "stage-places-label"].forEach(function (id) {
       try { if (m.getLayer(id)) m.moveLayer(id); } catch (e) {}
     });
   }
@@ -725,6 +735,7 @@
     applyTerrain(m);
     applyLabelBoost(m);
     applyExtraLabels(m);
+    applyStageLabels(m);
     applyOffroad(m);
     if ($("vintageChk").checked) applyVintage(m);
   }
@@ -954,10 +965,12 @@
         elev.push(isNaN(ele) ? null : ele);
       }
       if (coords.length >= 2) {
+        var tEl = g.pts.length ? g.pts[0].getElementsByTagName("time")[0] : null;
         out.tracks.push({
           feature: { type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} },
           elev: elev,
-          name: g.name
+          name: g.name,
+          t0: tEl ? tEl.textContent.trim() : null
         });
       }
     });
@@ -987,13 +1000,37 @@
     return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.72;
   }
 
-  function removeTrackLayers(m) {
-    tracks.forEach(function (t) {
-      ["gpx-arrows-" + t.id, "gpx-line-" + t.id, "gpx-casing-" + t.id].forEach(function (id) {
-        try { if (m.getLayer(id)) m.removeLayer(id); } catch (e) {}
-      });
-      try { if (m.getSource("gpx-" + t.id)) m.removeSource("gpx-" + t.id); } catch (e) {}
+  function removeOneTrack(m, t) {
+    ["gpx-jump-" + t.id, "gpx-arrows-" + t.id, "gpx-line-" + t.id, "gpx-casing-" + t.id].forEach(function (id) {
+      try { if (m.getLayer(id)) m.removeLayer(id); } catch (e) {}
     });
+    ["gpx-" + t.id, "gpx-jump-src-" + t.id].forEach(function (id) {
+      try { if (m.getSource(id)) m.removeSource(id); } catch (e) {}
+    });
+  }
+
+  function removeTrackLayers(m) {
+    tracks.forEach(function (t) { removeOneTrack(m, t); });
+  }
+
+  // Una traccia unita con dei salti (traghetti) si disegna a pezzi pieni,
+  // e i salti a parte, tratteggiati.
+  function splitAtJumps(t) {
+    var c = t.geojson.geometry.coordinates, pieces = [], jumps = [], cur = [c[0]];
+    for (var i = 1; i < c.length; i++) {
+      if (t.jumps[i - 1]) {
+        if (cur.length > 1) pieces.push(cur);
+        jumps.push([c[i - 1], c[i]]);
+        cur = [c[i]];
+      } else {
+        cur.push(c[i]);
+      }
+    }
+    if (cur.length > 1) pieces.push(cur);
+    return {
+      pieces: { type: "Feature", geometry: { type: "MultiLineString", coordinates: pieces }, properties: {} },
+      jumps: { type: "Feature", geometry: { type: "MultiLineString", coordinates: jumps }, properties: {} }
+    };
   }
 
   // Ridisegna tutte le tracce. Ordine: l'ultima dell'elenco viene aggiunta per
@@ -1009,7 +1046,8 @@
     for (var i = tracks.length - 1; i >= 0; i--) {
       var t = tracks[i];
       var contrast = isLightColor(t.color) ? "#2b2b2b" : "#ffffff";
-      m.addSource("gpx-" + t.id, { type: "geojson", data: t.geojson });
+      var split = (t.jumps && t.jumps.indexOf(true) >= 0) ? splitAtJumps(t) : null;
+      m.addSource("gpx-" + t.id, { type: "geojson", data: split ? split.pieces : t.geojson });
       m.addLayer({
         id: "gpx-casing-" + t.id, type: "line", source: "gpx-" + t.id,
         paint: {
@@ -1045,6 +1083,14 @@
           "text-halo-width": 1.1
         }
       }, anchor);
+      if (split) {
+        m.addSource("gpx-jump-src-" + t.id, { type: "geojson", data: split.jumps });
+        m.addLayer({
+          id: "gpx-jump-" + t.id, type: "line", source: "gpx-jump-src-" + t.id,
+          paint: { "line-color": t.color, "line-width": Math.max(1.2, w * 0.6), "line-dasharray": [1.6, 1.4] },
+          layout: { "line-cap": "butt", "line-join": "round" }
+        }, anchor);
+      }
     }
     keepLabelsOnTop(m);
   }
@@ -1083,6 +1129,7 @@
             map.setPaintProperty("gpx-casing-" + t.id, "line-color", contrast);
             map.setPaintProperty("gpx-arrows-" + t.id, "text-color", contrast);
             map.setPaintProperty("gpx-arrows-" + t.id, "text-halo-color", t.color);
+            if (map.getLayer("gpx-jump-" + t.id)) map.setPaintProperty("gpx-jump-" + t.id, "line-color", t.color);
           } catch (e) { rebuildTracks(map); }
         }
         renderProfileSoon();
@@ -1093,17 +1140,13 @@
       x.textContent = "×";
       x.title = "Rimuovi traccia";
       x.addEventListener("click", function () {
-        if (map) {
-          ["gpx-arrows-" + t.id, "gpx-line-" + t.id, "gpx-casing-" + t.id].forEach(function (id) {
-            try { if (map.getLayer(id)) map.removeLayer(id); } catch (e) {}
-          });
-          try { if (map.getSource("gpx-" + t.id)) map.removeSource("gpx-" + t.id); } catch (e) {}
-        }
+        if (map) removeOneTrack(map, t);
         tracks = tracks.filter(function (q) { return q.id !== t.id; });
         renderTrackList();
         if (map) rebuildTracks(map);
         updateProfTrackSel();
         renderProfileSoon();
+        if ($("stageNamesChk").checked) refreshStageNames();
       });
 
       item.appendChild(dot);
@@ -1113,6 +1156,7 @@
       list.appendChild(item);
     });
     $("orderHint").style.display = tracks.length > 1 ? "block" : "none";
+    updateStageUi();
   }
 
   // Feedback del caricamento visibile in entrambe le viste
@@ -1140,6 +1184,353 @@
     fitTracks();
   }
 
+  /* ================= Tappe: una traccia sola e nomi di partenza e arrivo ================= */
+  // Più GPX che si toccano capo a capo sono le tappe di un viaggio: si possono
+  // unire in una traccia sola (in ordine di orario, o a catena se mancano gli
+  // orari), e i buchi oltre 1 km fra una tappa e l'altra (traghetti) restano
+  // tratteggiati e non contano nei km. I nomi di partenza e arrivo sono i paesi
+  // OpenStreetMap più vicini a ogni capo di traccia entro 12 km, con un vantaggio
+  // a città e paesi su frazioni e quartieri. Si leggono dal layer "place" delle
+  // tile vettoriali OpenFreeMap (gratuite, senza chiave, stessi dati e stessa
+  // regola del tool Python cartine-da-appendere). Scartati perché inaffidabili:
+  // Mapbox Tilequery (per le città restituisce i quartieri), Overpass (server
+  // pubblico spesso al completo), Photon (il filtro sui luoghi non funziona).
+  var STAGE_SUFFIX = /[\s_\-·]*(day|giorno|tappa|stage|etappe|etapa|dia|día|tag)[\s_\-]*\d+\s*$/i;
+  var JUMP_M = 1000, THIN_M = 15, STAGE_RADIUS_M = 12000, SAME_PLACE_M = 6000;
+  var STAGE_BONUS_KM = { city: 8, town: 5, village: 2.5, hamlet: 0, locality: -1, suburb: -4, quarter: -4, neighbourhood: -5 };
+  var stagePlaces = [];   // [{name, lon, lat, rank}] scritti sulla carta
+  var stageSeq = 0;
+
+  function tStart(t) { return t.geojson.geometry.coordinates[0]; }
+  function tEnd(t) { var c = t.geojson.geometry.coordinates; return c[c.length - 1]; }
+  function gapM(a, b) { return haversine(a[1], a[0], b[1], b[0]); }
+
+  function looksLikeStages(list) {
+    if (list.length < 2) return false;
+    var linked = list.filter(function (u) {
+      return list.some(function (v) { return v !== u && gapM(tEnd(v), tStart(u)) < 10000; });
+    }).length;
+    return linked >= list.length - 1 - Math.floor(list.length / 6);  // tollera un traghetto ogni sei tappe
+  }
+
+  function reversedTrack(t) {
+    return {
+      id: t.id, name: t.name, color: t.color, t0: t.t0,
+      geojson: { type: "Feature", geometry: { type: "LineString", coordinates: t.geojson.geometry.coordinates.slice().reverse() }, properties: {} },
+      elev: (t.elev || []).slice().reverse()
+    };
+  }
+
+  function orderTracks(list) {
+    if (list.every(function (t) { return t.t0; })) {
+      return list.slice().sort(function (a, b) { return a.t0 < b.t0 ? -1 : (a.t0 > b.t0 ? 1 : 0); });
+    }
+    var rest = list.slice();
+    // la prima è quella che comincia più lontano dalla fine di tutte le altre
+    function lonely(t) {
+      var m = Infinity;
+      rest.forEach(function (o) {
+        if (o !== t) m = Math.min(m, gapM(tEnd(o), tStart(t)), gapM(tStart(o), tStart(t)));
+      });
+      return m === Infinity ? 0 : m;
+    }
+    var first = rest.reduce(function (a, b) { return lonely(b) > lonely(a) ? b : a; });
+    rest.splice(rest.indexOf(first), 1);
+    var chain = [first];
+    while (rest.length) {
+      var cur = tEnd(chain[chain.length - 1]), best = null, bestD = Infinity, flip = false;
+      rest.forEach(function (t) {
+        var df = gapM(cur, tStart(t)), dr = gapM(cur, tEnd(t));
+        if (df < bestD) { best = t; bestD = df; flip = false; }
+        if (dr < bestD) { best = t; bestD = dr; flip = true; }
+      });
+      rest.splice(rest.indexOf(best), 1);
+      chain.push(flip ? reversedTrack(best) : best);   // una tappa registrata al contrario viene girata
+    }
+    return chain;
+  }
+
+  function mergeTracks() {
+    if (tracks.length < 2) return;
+    var ordered = orderTracks(tracks);
+    var byTime = ordered.every(function (t) { return t.t0; });
+    var coords = [], elev = [], jumps = [], starts = [];
+    ordered.forEach(function (t, i) {
+      var c = t.geojson.geometry.coordinates, e = t.elev || [];
+      var keep = [0], acc = 0;               // un punto ogni 15 m basta anche per l'A1
+      for (var k = 1; k < c.length; k++) {
+        acc += gapM(c[k - 1], c[k]);
+        if (acc >= THIN_M || k === c.length - 1) { keep.push(k); acc = 0; }
+      }
+      if (i > 0) jumps.push(gapM(coords[coords.length - 1], c[0]) > JUMP_M);  // il segmento che lega la tappa precedente a questa
+      starts.push(coords.length);
+      keep.forEach(function (k, j) {
+        coords.push(c[k]);
+        elev.push(e[k] == null ? null : e[k]);
+        if (j > 0) jumps.push(false);
+      });
+    });
+    var nJumps = jumps.filter(Boolean).length;
+    var base = (ordered[0].name || "Traccia").replace(STAGE_SUFFIX, "").replace(/_/g, " ").trim() || ordered[0].name;
+    if (map) removeTrackLayers(map);
+    tracks = [{
+      id: ++trackSeq, name: base, color: ordered[0].color, t0: ordered[0].t0,
+      geojson: { type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} },
+      elev: elev, _prof: null, jumps: jumps, stageStarts: starts
+    }];
+    renderTrackList();
+    if (map) rebuildTracks(map);
+    updateProfTrackSel();
+    renderProfileSoon();
+    $("mergeHint").textContent = ordered.length + " tracce unite in ordine di " + (byTime ? "orario" : "percorso") +
+      (nJumps ? ", con " + nJumps + (nJumps === 1 ? " salto tratteggiato" : " salti tratteggiati") + " (traghetti) che non contano nei km." : ".");
+    if ($("stageNamesChk").checked) refreshStageNames();
+  }
+
+  function updateStageUi() {
+    $("stageBox").style.display = tracks.length ? "block" : "none";
+    var canMerge = tracks.length >= 2;
+    $("mergeBtn").style.display = canMerge ? "block" : "none";
+    if (canMerge) {
+      $("mergeHint").textContent = looksLikeStages(tracks) ? "Le tracce si toccano capo a capo: sembrano le tappe di un viaggio." : "";
+    } else if (!(tracks[0] && tracks[0].stageStarts)) {
+      $("mergeHint").textContent = "";
+    }
+  }
+
+  // Capi di traccia in ordine: partenza e arrivo di ogni traccia; per una traccia
+  // unita, l'inizio di ogni tappa e la fine della tappa prima di un salto.
+  function stageEndpoints() {
+    var out = [];
+    tracks.forEach(function (t) {
+      var c = t.geojson.geometry.coordinates;
+      if (t.stageStarts) {
+        t.stageStarts.forEach(function (i) {
+          if (i > 0 && t.jumps && t.jumps[i - 1]) out.push(c[i - 1]);
+          out.push(c[i]);
+        });
+      } else {
+        out.push(c[0]);
+      }
+      out.push(c[c.length - 1]);
+    });
+    return out;
+  }
+
+  var OFM_TILEJSON = "https://tiles.openfreemap.org/planet";   // l'URL delle tile è datato: va letto da qui
+  var ofmTemplate = null, ofmTiles = {};
+
+  function ofmTemplateP() {
+    if (ofmTemplate) return Promise.resolve(ofmTemplate);
+    return fetch(OFM_TILEJSON).then(function (r) { return r.json(); })
+      .then(function (j) { ofmTemplate = j.tiles[0]; return ofmTemplate; });
+  }
+
+  function lonLatToTile(lon, lat, z) {
+    var n = Math.pow(2, z), r = lat * Math.PI / 180;
+    return [Math.floor((lon + 180) / 360 * n), Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n)];
+  }
+
+  function gunzipIfNeeded(buf) {
+    var u = new Uint8Array(buf);
+    if (u.length > 2 && u[0] === 0x1f && u[1] === 0x8b && typeof DecompressionStream !== "undefined") {
+      return new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
+    }
+    return Promise.resolve(buf);
+  }
+
+  // Decodifica minima di una tile Mapbox Vector Tile: solo i punti del layer "place".
+  function decodePlaces(u, z, x, y) {
+    var out = [], pos = 0, n = Math.pow(2, z), dec = new TextDecoder();
+    function varint() { var r = 0, m = 1, b; do { b = u[pos++]; r += (b & 0x7f) * m; m *= 128; } while (b & 0x80); return r; }
+    function zz(v) { return v % 2 ? -(v + 1) / 2 : v / 2; }
+    function skip(wt) {
+      if (wt === 0) varint(); else if (wt === 1) pos += 8; else if (wt === 5) pos += 4;
+      else if (wt === 2) { var l = varint(); pos += l; } else throw new Error("tipo " + wt);
+    }
+    function packed(end) { var a = []; while (pos < end) a.push(varint()); return a; }
+    while (pos < u.length) {
+      var tag = varint(), field = Math.floor(tag / 8), wt = tag % 8;
+      if (field !== 3 || wt !== 2) { skip(wt); continue; }
+      var lend = varint() + pos, name = "", keys = [], vals = [], feats = [], extent = 4096;
+      while (pos < lend) {
+        var t2 = varint(), f2 = Math.floor(t2 / 8), w2 = t2 % 8;
+        if (f2 === 1 && w2 === 2) { var ln = varint(); name = dec.decode(u.subarray(pos, pos + ln)); pos += ln; }
+        else if (f2 === 2 && w2 === 2) { var fl = varint(); feats.push([pos, pos + fl]); pos += fl; }
+        else if (f2 === 3 && w2 === 2) { var kl = varint(); keys.push(dec.decode(u.subarray(pos, pos + kl))); pos += kl; }
+        else if (f2 === 4 && w2 === 2) {
+          var vend = varint() + pos, val = null;
+          while (pos < vend) {
+            var t3 = varint(), f3 = Math.floor(t3 / 8), w3 = t3 % 8;
+            if (f3 === 1) { var sl = varint(); val = dec.decode(u.subarray(pos, pos + sl)); pos += sl; }
+            else if (f3 === 2) { val = new DataView(u.buffer, u.byteOffset + pos, 4).getFloat32(0, true); pos += 4; }
+            else if (f3 === 3) { val = new DataView(u.buffer, u.byteOffset + pos, 8).getFloat64(0, true); pos += 8; }
+            else if (f3 === 4 || f3 === 5) val = varint();
+            else if (f3 === 6) val = zz(varint());
+            else if (f3 === 7) val = !!varint();
+            else skip(w3);
+          }
+          vals.push(val);
+        }
+        else if (f2 === 5 && w2 === 0) extent = varint();
+        else skip(w2);
+      }
+      if (name !== "place") { pos = lend; continue; }
+      feats.forEach(function (fr) {
+        pos = fr[0];
+        var tags = [], type = 0, geom = [];
+        while (pos < fr[1]) {
+          var t4 = varint(), f4 = Math.floor(t4 / 8), w4 = t4 % 8;
+          if (f4 === 2 && w4 === 2) { var e2 = varint() + pos; tags = packed(e2); }
+          else if (f4 === 3 && w4 === 0) type = varint();
+          else if (f4 === 4 && w4 === 2) { var e4 = varint() + pos; geom = packed(e4); }
+          else skip(w4);
+        }
+        if (type !== 1 || geom.length < 3) return;
+        var px = zz(geom[1]), py = zz(geom[2]);
+        if (px < 0 || py < 0 || px >= extent || py >= extent) return;   // zona buffer: la tile accanto ce l'ha già
+        var props = {};
+        for (var i = 0; i + 1 < tags.length; i += 2) props[keys[tags[i]]] = vals[tags[i + 1]];
+        var lon = (x + px / extent) / n * 360 - 180;
+        var lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * (y + py / extent) / n))) * 180 / Math.PI;
+        // il nome del cartello stradale, non la traduzione: «Lago Posadas», non «Hipólito Yrigoyen»
+        var nm = props.name || props["name:latin"];
+        if (nm) out.push({ name: nm, type: props["class"], lon: lon, lat: lat });
+      });
+      pos = lend;
+    }
+    return out;
+  }
+
+  function placesInTile(tpl, z, x, y) {
+    var key = z + "/" + x + "/" + y;
+    if (!ofmTiles[key]) {
+      var url = tpl.replace("{z}", z).replace("{x}", x).replace("{y}", y);
+      ofmTiles[key] = fetch(url)
+        .then(function (r) { return r.ok ? r.arrayBuffer() : new ArrayBuffer(0); })
+        .then(gunzipIfNeeded)
+        .then(function (buf) { return decodePlaces(new Uint8Array(buf), z, x, y); })
+        .catch(function () { return []; });   // in mezzo alla steppa la tile è vuota: nessun paese
+    }
+    return ofmTiles[key];
+  }
+
+  function placesAround(tpl, pt, z) {
+    var dLat = STAGE_RADIUS_M / 111000, dLon = dLat / Math.max(Math.cos(pt[1] * Math.PI / 180), 0.05);
+    var a = lonLatToTile(pt[0] - dLon, pt[1] + dLat, z), b = lonLatToTile(pt[0] + dLon, pt[1] - dLat, z), jobs = [];
+    for (var tx = a[0]; tx <= b[0]; tx++) for (var ty = a[1]; ty <= b[1]; ty++) jobs.push(placesInTile(tpl, z, tx, ty));
+    return Promise.all(jobs).then(function (lists) {
+      return [].concat.apply([], lists).filter(function (f) {
+        return ["continent", "country", "state", "province", "island", "islet", "archipelago"].indexOf(f.type) < 0 &&
+               gapM(pt, [f.lon, f.lat]) <= STAGE_RADIUS_M;
+      });
+    });
+  }
+
+  // Luoghi entro 12 km da un punto: tile z12 (con le frazioni), e z10 se lì non c'è nessun paese vero.
+  function placesNearPoint(tpl, pt) {
+    return placesAround(tpl, pt, 12).then(function (c12) {
+      var hasTown = c12.some(function (f) { return f.type === "city" || f.type === "town" || f.type === "village"; });
+      if (hasTown) return c12;
+      return placesAround(tpl, pt, 10).then(function (c10) { return c12.concat(c10); });
+    });
+  }
+
+  function refreshStageNames() {
+    var my = ++stageSeq;
+    if (!$("stageNamesChk").checked || !tracks.length) {
+      stagePlaces = [];
+      if (map && map.isStyleLoaded()) applyStageLabels(map);
+      $("stageNamesHint").textContent = "";
+      return;
+    }
+    var pts = stageEndpoints();
+    var clusters = [];   // capi a meno di 6 km sono lo stesso posto (arrivo e ripartenza dopo la notte)
+    pts.forEach(function (pt, i) {
+      var edge = (i === 0 || i === pts.length - 1);
+      var hit = null;
+      clusters.forEach(function (q) { if (!hit && gapM(q.pt, pt) < SAME_PLACE_M) hit = q; });
+      if (hit) { if (edge) hit.edge = true; return; }
+      clusters.push({ pt: pt, edge: edge });
+    });
+    $("stageNamesHint").textContent = "Cerco i paesi vicino a " + clusters.length + " capi di traccia…";
+    ofmTemplateP()
+      .then(function (tpl) { return Promise.all(clusters.map(function (c) { return placesNearPoint(tpl, c.pt); })); })
+      .then(function (perCluster) {
+        if (my !== stageSeq) return;
+        var seen = {}, named = [], unnamed = 0;
+        clusters.forEach(function (cl, i) {
+          var best = null, bestScore = Infinity;
+          perCluster[i].forEach(function (f) {
+            var km = gapM(cl.pt, [f.lon, f.lat]) / 1000;
+            var bonus = STAGE_BONUS_KM[f.type] != null ? STAGE_BONUS_KM[f.type] : -2;
+            if (km <= STAGE_RADIUS_M / 1000 && km - bonus < bestScore) { best = f; bestScore = km - bonus; }
+          });
+          if (!best) { unnamed++; return; }   // mai un nome inventato: resta senza
+          var rank = (best.type === "city" || clusters[i].edge) ? 1 : 2;
+          var key = best.name.toLowerCase();
+          if (seen[key]) { seen[key].rank = Math.min(seen[key].rank, rank); return; }
+          seen[key] = { name: best.name, lon: best.lon, lat: best.lat, rank: rank };
+          named.push(seen[key]);
+        });
+        stagePlaces = named;
+        if (map && map.isStyleLoaded()) applyStageLabels(map);
+        var msg = named.length + " nomi di partenza e arrivo sulla carta.";
+        if (unnamed) msg += unnamed === 1 ? " Un capo non ha un paese entro 12 km e resta senza nome."
+                                         : " " + unnamed + " capi non hanno un paese entro 12 km e restano senza nome.";
+        $("stageNamesHint").textContent = msg;
+      })
+      .catch(function () {
+        if (my !== stageSeq) return;
+        $("stageNamesHint").textContent = "Non riesco a leggere le tile di OpenFreeMap. Controlla la connessione e riprova togliendo e rimettendo la spunta.";
+      });
+  }
+
+  function applyStageLabels(m) {
+    if (!m || !m.getStyle) return;
+    try { if (!m.getStyle()) return; } catch (e) { return; }
+    var data = {
+      type: "FeatureCollection",
+      features: stagePlaces.map(function (q) {
+        return { type: "Feature", geometry: { type: "Point", coordinates: [q.lon, q.lat] }, properties: { name: q.name, rank: q.rank } };
+      })
+    };
+    var src = m.getSource("stage-places");
+    if (src) src.setData(data);
+    else m.addSource("stage-places", { type: "geojson", data: data });
+    if (!m.getLayer("stage-places-dot")) {
+      m.addLayer({
+        id: "stage-places-dot", type: "circle", source: "stage-places",
+        paint: {
+          "circle-radius": ["match", ["get", "rank"], 1, 3.4, 2.8],
+          "circle-color": ["match", ["get", "rank"], 1, "#1f1f1f", "#333333"],
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 0.9
+        }
+      });
+    }
+    if (!m.getLayer("stage-places-label")) {
+      m.addLayer({
+        id: "stage-places-label", type: "symbol", source: "stage-places",
+        layout: {
+          "text-field": ["get", "name"],
+          "text-font": ["DIN Pro Medium", "Arial Unicode MS Regular"],
+          "text-size": ["match", ["get", "rank"], 1, 14.5, 12.5],
+          "text-offset": [0, 0.7],
+          "text-anchor": "top",   // ancoraggio fisso: con text-variable-anchor oltre lo zoom 5 i nomi non si disegnano
+          "text-padding": 1
+        },
+        paint: {
+          "text-color": ["match", ["get", "rank"], 1, "#1a1a1a", "#2b2b2b"],
+          "text-halo-color": "rgba(255,253,246,0.92)",
+          "text-halo-width": 1.3
+        }
+      });
+    }
+    applyLabelBoost(m);   // la mappa di base non ripete gli stessi nomi
+    keepLabelsOnTop(m);
+  }
+
   function handleGpxFiles(fileList) {
     var files = Array.prototype.slice.call(fileList);
     var pending = files.length;
@@ -1162,6 +1553,7 @@
             color: PALETTE[(tracks.length) % (PALETTE.length - 2)][1],
             geojson: tr.feature,
             elev: tr.elev,
+            t0: tr.t0,
             _prof: null
           });
           addedTracks++;
@@ -1183,6 +1575,7 @@
       updateProfTrackSel();
       renderProfileSoon();
       if (addedTracks && map) requestFitTracks();
+      if (addedTracks && $("stageNamesChk").checked) refreshStageNames();
     }
     files.forEach(function (file, fi) {
       var reader = new FileReader();
@@ -1284,7 +1677,7 @@
     }
     var cum = [0];
     for (i = 1; i < c.length; i++) {
-      cum.push(cum[i - 1] + haversine(c[i - 1][1], c[i - 1][0], c[i][1], c[i][0]));
+      cum.push(cum[i - 1] + (t.jumps && t.jumps[i - 1] ? 0 : haversine(c[i - 1][1], c[i - 1][0], c[i][1], c[i][0])));
     }
     var len = cum[cum.length - 1];
     if (len < 100) { t._prof = { noEle: true }; return t._prof; }
@@ -2043,6 +2436,8 @@
     });
   });
 
+  $("mergeBtn").addEventListener("click", mergeTracks);
+  $("stageNamesChk").addEventListener("change", refreshStageNames);
   $("arrowsChk").addEventListener("change", function () {
     if (!map || !map.isStyleLoaded()) return;
     var vis = this.checked ? "visible" : "none";

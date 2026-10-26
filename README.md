@@ -23,6 +23,19 @@ un PNG ad alta risoluzione pronto per la tipografia.
 - Inclinazione della vista a volo d'uccello, con terreno 3D opzionale
 - Export PNG a 150/200/300 DPI nei formati 30×40, 50×70, A2, A1, con opzione
   di dettaglio maggiorato per la rete sentieristica
+- **Tappe di un viaggio in una traccia sola**. Se i GPX caricati si toccano
+  capo a capo (le tappe giornaliere esportate da Strava o Garmin) compare il
+  pulsante «Unisci in una traccia sola». Le tracce vengono messe in ordine con
+  l'orario del primo punto, o a catena se gli orari mancano, e diventano una
+  traccia unica. I buchi oltre 1 km fra una tappa e l'altra (un traghetto, un
+  trasferimento) restano tratteggiati e non contano nei km dell'altimetria
+- **Nomi di partenza e arrivo**. Con la spunta omonima, per ogni capo di
+  traccia il tool scrive sulla carta il paese OpenStreetMap più vicino entro
+  12 km, preferendo città e paesi a frazioni e quartieri, con il nome del
+  cartello stradale. I paesi si leggono dalle tile gratuite di OpenFreeMap,
+  senza chiavi e senza limiti d'uso, con la stessa regola del tool Python
+  cartine-da-appendere. Un capo senza paese vicino resta senza nome, mai un
+  nome inventato, e il riquadro lo dice
 - **Vista Altimetria**: profili altimetrici da montare sui file di stampa,
   con i paesi e i passi presi da un GPX di waypoint — vedi sotto
 
